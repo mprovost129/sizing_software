@@ -4,9 +4,11 @@ from engine import clear_span, default_deflection_settings
 
 from .choices import (
     ALL_SIZE_CHOICES,
+    DEFAULT_END_CONDITION,
     DEFAULT_MATERIAL,
     DEFAULT_PLIES,
     DEFAULT_SERVICE_CONDITION,
+    END_CONDITION_CHOICES,
     LOAD_TYPE_CHOICES,
     MATERIAL_CATEGORY,
     MATERIAL_CHOICES,
@@ -321,6 +323,97 @@ class BeamDesignForm(forms.Form):
         # resolves stored nulls via its own `or default` fallback. Storing
         # null (rather than the resolved number) keeps a saved "use the
         # default" design dynamic, matching the model's design.
+        return cleaned
+
+
+class ColumnDesignForm(forms.Form):
+    """Axial compression (column / post) designer -- a separate, simpler
+    flow than the beam designer (no span, loads, or deflection)."""
+    name = forms.CharField(
+        label="Design name (for saving)", required=False, max_length=100,
+        widget=forms.TextInput(attrs={"class": "fc-input"}),
+    )
+    project = forms.ModelChoiceField(
+        label="Project", queryset=BeamProject.objects.none(), required=False,
+        empty_label="No project", widget=forms.Select(attrs={"class": "fc-select"}),
+    )
+    material = forms.ChoiceField(
+        label="Material", choices=MATERIAL_CHOICES, initial=DEFAULT_MATERIAL,
+        widget=forms.Select(attrs={"class": "fc-select"}),
+    )
+    nominal_size = forms.ChoiceField(
+        label="Section", choices=ALL_SIZE_CHOICES,
+        widget=forms.Select(attrs={"class": "fc-select"}),
+    )
+    plies = forms.TypedChoiceField(
+        label="Plies (built-up)", choices=PLY_CHOICES, coerce=int, initial=DEFAULT_PLIES,
+        required=False, empty_value=DEFAULT_PLIES,
+        widget=forms.Select(attrs={"class": "fc-select"}),
+    )
+    dead_load_lb = forms.FloatField(
+        label="Axial dead load (lb)", min_value=0, required=False,
+        widget=forms.NumberInput(attrs={"class": "fc-input"}),
+    )
+    live_load_lb = forms.FloatField(
+        label="Axial live load (lb)", min_value=0, required=False,
+        widget=forms.NumberInput(attrs={"class": "fc-input"}),
+    )
+    snow_load_lb = forms.FloatField(
+        label="Axial snow load (lb)", min_value=0, required=False,
+        widget=forms.NumberInput(attrs={"class": "fc-input"}),
+    )
+    roof_live_load_lb = forms.FloatField(
+        label="Axial roof live load (lb)", min_value=0, required=False,
+        widget=forms.NumberInput(attrs={"class": "fc-input"}),
+    )
+    wind_load_lb = forms.FloatField(
+        label="Axial wind load (lb)", min_value=0, required=False,
+        widget=forms.NumberInput(attrs={"class": "fc-input"}),
+    )
+    height_ft = forms.FloatField(
+        label="Column height (ft)", min_value=0.1,
+        widget=forms.NumberInput(attrs={"class": "fc-input"}),
+    )
+    unbraced_length_d_ft = forms.FloatField(
+        label="Unbraced length about the depth (d) axis (ft)", min_value=0.1, required=False,
+        help_text="Blank = full column height.",
+        widget=forms.NumberInput(attrs={"class": "fc-input", "placeholder": "= height"}),
+    )
+    unbraced_length_b_ft = forms.FloatField(
+        label="Unbraced length about the width (b) axis (ft)", min_value=0.1, required=False,
+        help_text="Blank = full column height. Reduce it if the weak axis is braced (e.g. sheathed studs).",
+        widget=forms.NumberInput(attrs={"class": "fc-input", "placeholder": "= height"}),
+    )
+    end_condition = forms.ChoiceField(
+        label="End condition (Ke)", choices=END_CONDITION_CHOICES, initial=DEFAULT_END_CONDITION,
+        widget=forms.Select(attrs={"class": "fc-select"}),
+    )
+
+    def __init__(self, *args, **kwargs):
+        user = kwargs.pop("user", None)
+        super().__init__(*args, **kwargs)
+        if user is not None:
+            self.fields["project"].queryset = BeamProject.objects.filter(user=user)
+
+    def clean(self):
+        cleaned = super().clean()
+        material = cleaned.get("material")
+        nominal_size = cleaned.get("nominal_size")
+        if material and nominal_size:
+            material_cat = MATERIAL_CATEGORY.get(material, "sawn")
+            size_cat = SIZE_CATEGORY.get(nominal_size, "sawn")
+            cat_label = {"sawn": "sawn-lumber", "lvl": "LVL", "glulam": "glulam"}
+            if material_cat != size_cat:
+                self.add_error(
+                    "nominal_size",
+                    f"A {cat_label[material_cat]} material needs a {cat_label[material_cat]} section.",
+                )
+            if material_cat == "glulam" and cleaned.get("plies", 1) and cleaned["plies"] > 1:
+                cleaned["plies"] = 1
+        if not (cleaned.get("dead_load_lb") or cleaned.get("live_load_lb")
+                or cleaned.get("snow_load_lb") or cleaned.get("roof_live_load_lb")
+                or cleaned.get("wind_load_lb")):
+            self.add_error("dead_load_lb", "Enter at least one axial load.")
         return cleaned
 
 

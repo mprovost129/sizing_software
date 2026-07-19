@@ -1,0 +1,42 @@
+{% with s=result.summary c=result.compression %}
+<div class="fc-card" style="margin-top:1rem;">
+    <div class="verdict-banner verdict-banner--{% if result.passed %}pass{% else %}fail{% endif %}" style="padding:0.9rem 1.25rem;">
+        <p class="verdict-title">
+            {% if result.passed %}<i class="bi bi-check-circle-fill"></i> PASS{% else %}<i class="bi bi-x-circle-fill"></i> FAIL{% endif %}
+            &mdash; {{ s.section.label }} {{ s.material_name }} &middot; {{ height_ft|floatformat:1 }} ft column
+        </p>
+        <p class="verdict-sub" style="font-size:0.8rem;">
+            {{ c.name }} &mdash; ratio {{ c.ratio|floatformat:3 }} ({{ c.governing_combo }} governs) &middot;
+            F'<sub>c</sub> = {{ s.fc_base }} &times; C<sub>F</sub>({{ s.cf_c|floatformat:2 }}) &times; C<sub>P</sub>({{ s.cp|floatformat:3 }}) psi
+        </p>
+    </div>
+    <div class="fc-card-body">
+        <div class="stat-row">
+            <div class="stat-pill"><div class="stat-label">Slenderness l<sub>e</sub>/d</div><div class="stat-value">{{ s.slenderness|floatformat:1 }}</div></div>
+            <div class="stat-pill"><div class="stat-label">C<sub>P</sub></div><div class="stat-value">{{ s.cp|floatformat:3 }}</div></div>
+            <div class="stat-pill"><div class="stat-label">F<sub>cE</sub> (psi)</div><div class="stat-value">{{ s.fce|floatformat:0 }}</div></div>
+            <div class="stat-pill"><div class="stat-label">f<sub>c</sub> (psi)</div><div class="stat-value">{{ c.demand|floatformat:0 }}</div></div>
+            <div class="stat-pill"><div class="stat-label">F'<sub>c</sub> (psi)</div><div class="stat-value">{{ c.capacity|floatformat:0 }}</div></div>
+            <div class="stat-pill"><div class="stat-label">Area (in&sup2;)</div><div class="stat-value">{{ s.section.A|floatformat:2 }}</div></div>
+            <div class="stat-pill"><div class="stat-label">c</div><div class="stat-value">{{ s.c_coefficient }}</div></div>
+            <div class="stat-pill"><div class="stat-label">K<sub>e</sub></div><div class="stat-value">{{ s.ke }}</div></div>
+        </div>
+        <p style="font-size:0.74rem;color:var(--fc-text-muted);margin-top:0.75rem;">
+            Slenderness is the larger of the two axes:
+            l<sub>e</sub>/d = {{ s.le_d|floatformat:1 }}/{{ s.section.d|floatformat:2 }} and
+            l<sub>e</sub>/b = {{ s.le_b|floatformat:1 }}/{{ s.section.b|floatformat:2 }} (governing {{ s.slenderness|floatformat:1 }} &le; 50).
+            {% if s.material_category != 'sawn' %}Engineered member: c = 0.9, C<sub>F</sub> = 1.0.{% endif %}
+            Dry service assumed; concentric axial load only (no combined bending).
+        </p>
+        <table class="fc-table" style="margin-top:0.75rem;font-size:0.8rem;">
+            <thead><tr><th>Combo</th><th>C<sub>D</sub></th><th>P (lb)</th><th>f<sub>c</sub> (psi)</th><th>C<sub>P</sub></th><th>F'<sub>c</sub> (psi)</th><th>Ratio</th></tr></thead>
+            <tbody>
+            {% for combo in s.combos %}
+            <tr><td>{{ combo.name }}</td><td>{{ combo.cd }}</td><td>{{ combo.p|floatformat:0 }}</td><td>{{ combo.fc|floatformat:0 }}</td><td>{{ combo.cp|floatformat:3 }}</td><td>{{ combo.fc_allow|floatformat:0 }}</td>
+                <td class="{% if combo.ratio > 1.0 %}check-ratio--fail{% elif combo.ratio > 0.85 %}check-ratio--warn{% else %}check-ratio--pass{% endif %}">{{ combo.ratio|floatformat:3 }}</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endwith %}

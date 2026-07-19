@@ -121,5 +121,31 @@
             {% endif %}
         </div>
     </div>
+
+    {% if column_rows %}
+    <div class="fc-card" style="margin-top:1rem;">
+        <div class="fc-card-header">
+            <span class="fc-card-title"><i class="bi bi-bricks"></i> Columns</span>
+            <span style="font-size:.72rem;color:var(--fc-text-muted);">{{ column_rows|length }} column{{ column_rows|length|pluralize }}</span>
+        </div>
+        <div class="fc-card-body">
+            <div class="designs-grid">
+                {% for column, cresult in column_rows %}
+                <a href="{% url 'beams:column_detail' column.pk %}" class="design-card" style="border-left:3px solid {% if cresult.passed %}var(--fc-pass-border){% else %}var(--fc-fail-border){% endif %};">
+                    <div class="design-card-top">
+                        <div><p class="design-card-name">{{ column.name|default:"Unnamed column" }}</p><p class="design-card-meta">{{ column.created_at|date:"M j, Y" }}</p></div>
+                        <span class="fc-badge fc-badge--{% if cresult.passed %}pass{% else %}fail{% endif %}">{% if cresult.passed %}PASS{% else %}FAIL{% endif %}</span>
+                    </div>
+                    <div class="design-card-props">
+                        <span class="design-prop"><strong>{{ column.section_label }}</strong> {{ column.get_material_display }}</span>
+                        <span class="design-prop"><strong>{{ column.height_ft|floatformat:1 }} ft</strong> column</span>
+                        <span class="design-prop">Gov: <strong>{{ cresult.compression.ratio|floatformat:3 }}</strong></span>
+                    </div>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}

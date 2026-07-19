@@ -45,6 +45,9 @@ Completed in the live app:
 - Result details now include true shear, moment, and deflection diagrams rather than only the loading sketch
 - PDF export now includes project context, full load schedules, point loads, support/geometry schedules, and embedded analysis diagrams for a more report-like calculation package
 - Settings tab now includes serviceability presets and floor-subfloor performance tuning that tighten recommended deflection limits without assuming composite action
+- Column / post designer (NEW member type): a dedicated page checks axial compression per NDS 3.7 (fc = P/A vs F'c = Fc x CD x CF x CP), with the column stability factor CP, per-axis slenderness le/d and le/b (each with its own unbraced length and the end-condition factor Ke), governing load-combination selection, a loud le/d > 50 failure, and c = 0.8 sawn / 0.9 engineered. It reuses the full material library (sawn incl. Southern Pine, LVL, glulam) and built-up plies; dry-service, concentric-load MVP
+- Column designs are saved, recomputed from stored inputs, and reach beam-style parity: a ColumnDesign model with an optional project link, a saved-columns list on the designer, a detail page (recompute + delete), a PDF calculation report, and a Columns section on the project page
+- The project calculation package now spans both member types: the project PDF cover sheet counts and indexes columns and appends a full axial-compression report per column, and the project CSV export gains a Columns section (slenderness, CP, governing ratio). Issue snapshot packages remain beams-only. (Standalone column revisions/issues remain a follow-up.)
 
 ## What Is Next
 

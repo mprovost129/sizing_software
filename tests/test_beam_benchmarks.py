@@ -7,7 +7,15 @@ validation requirement: every release verified against known solutions.
 import pytest
 
 from beams.load_inputs import entered_uniform_loads_to_plf
-from engine import SPF_NO2, PointLoad, Section, UniformLoad, design_beam, get_material
+from engine import (
+    SPF_NO2,
+    PointLoad,
+    Section,
+    UniformLoad,
+    design_beam,
+    design_column,
+    get_material,
+)
 from engine.beam import (
     analyze,
     back_span_deflection,
@@ -391,6 +399,50 @@ def test_southern_pine_uses_size_specific_fb_and_no_cf():
     # Contrast: SPF No. 2 2x10 still uses the CF framework (CF = 1.1).
     spf = design_beam(12.0, loads, Section.from_nominal("2x10"), get_material("spf_no2"), repetitive=True)
     assert spf.summary.cf == pytest.approx(1.1)
+
+
+def test_column_stability_and_axial_check_nds_3_7():
+    # 3-ply 2x6 SPF No. 2 post (b = 4.5, d = 5.5, A = 24.75 in^2), 8 ft
+    # (96 in) unbraced both ways, Ke = 1.0, carrying 10,000 lb dead +
+    # 5,000 lb live. NDS 3.7 by hand, D+L governing:
+    #   slenderness = max(96/5.5, 96/4.5) = 96/4.5 = 21.33 (weak axis)
+    #   FcE = 0.822*510000 / 21.33^2 = 921 psi
+    #   Fc* = 1150 * CF(1.1) * CD(1.0) = 1265 psi
+    #   alpha = 921/1265 = 0.728;  c = 0.8
+    #   CP = (1.728/1.6) - sqrt[(1.728/1.6)^2 - 0.728/0.8] = 0.574
+    #   Fc' = 1265 * 0.574 = 726 psi;  fc = 15000/24.75 = 606 psi
+    #   ratio = 606 / 726 = 0.835
+    section = Section.from_nominal("2x6", plies=3)
+    result = design_column(
+        {"dead": 10000, "live": 5000}, section, SPF_NO2,
+        unbraced_length_d=96.0, unbraced_length_b=96.0, ke=1.0,
+    )
+    s = result.summary
+    assert s.cf_c == pytest.approx(1.1)          # Fc size factor for 2x6
+    assert s.c_coefficient == 0.8                # sawn lumber
+    assert s.slenderness == pytest.approx(21.333, abs=0.01)
+    assert s.fce == pytest.approx(921.0, abs=1.5)
+    assert s.cp == pytest.approx(0.574, abs=0.002)
+    assert result.compression.governing_combo == "D+L"
+    assert result.compression.ratio == pytest.approx(0.835, abs=0.003)
+    assert result.passed is True
+
+    # A single 2x6 (b = 1.5) unbraced 8 ft is far too slender: le/b = 64 >
+    # 50, so the check fails loudly regardless of stress.
+    slender = design_column(
+        {"dead": 2000}, Section.from_nominal("2x6"), SPF_NO2, 96.0, 96.0, ke=1.0,
+    )
+    assert slender.summary.slenderness == pytest.approx(64.0, abs=0.1)
+    assert slender.summary.over_slender is True
+    assert slender.passed is False
+
+    # Engineered lumber uses c = 0.9 (vs 0.8 for sawn).
+    glulam = design_column(
+        {"dead": 10000}, Section.from_nominal("gl_5.125x12"), get_material("gl_24f_1_8e"),
+        120.0, 120.0, ke=1.0,
+    )
+    assert glulam.summary.c_coefficient == 0.9
+    assert glulam.summary.cf_c == 1.0
 
 
 def test_off_center_point_load_reactions():

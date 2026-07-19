@@ -10,15 +10,19 @@ from engine import (
     UniformLoad,
     default_deflection_settings,
     design_beam,
+    design_column,
     get_material,
 )
 from engine.checks import BeamDesignResult
+from engine.columns import ColumnResult
 
 from .choices import (
     ALL_SIZE_CHOICES,
+    DEFAULT_END_CONDITION,
     DEFAULT_MATERIAL,
     DEFAULT_PLIES,
     DEFAULT_SERVICE_CONDITION,
+    END_CONDITION_CHOICES,
     MATERIAL_CHOICES,
     MEMBER_TYPE_CHOICES,
     PERFORMANCE_PROFILE_CHOICES,
@@ -338,4 +342,64 @@ class BeamDesign(models.Model):
             ),
             unbraced_length=(self.unbraced_length_ft or 0) * 12 or None,
             wet_service=self.service_condition == "wet",
+        )
+
+
+class ColumnDesign(models.Model):
+    """A saved axial-compression (column / post) design. Like BeamDesign,
+    the stored inputs are the source of truth and the result is recomputed
+    on demand, so refined engine formulas apply to old records."""
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="column_designs",
+    )
+    project = models.ForeignKey(
+        BeamProject, on_delete=models.SET_NULL, null=True, blank=True, related_name="column_designs",
+    )
+    name = models.CharField(max_length=100, blank=True)
+    material = models.CharField(max_length=20, choices=MATERIAL_CHOICES, default=DEFAULT_MATERIAL)
+    nominal_size = models.CharField(max_length=20, choices=ALL_SIZE_CHOICES)
+    plies = models.PositiveSmallIntegerField(choices=PLY_CHOICES, default=DEFAULT_PLIES)
+    dead_load_lb = models.FloatField(default=0)
+    live_load_lb = models.FloatField(default=0)
+    snow_load_lb = models.FloatField(default=0)
+    roof_live_load_lb = models.FloatField(default=0)
+    wind_load_lb = models.FloatField(default=0)
+    height_ft = models.FloatField()
+    unbraced_length_d_ft = models.FloatField(null=True, blank=True)
+    unbraced_length_b_ft = models.FloatField(null=True, blank=True)
+    end_condition = models.CharField(max_length=8, choices=END_CONDITION_CHOICES, default=DEFAULT_END_CONDITION)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.name or f"{self.section_label} column, {self.height_ft} ft"
+
+    @property
+    def section_label(self):
+        base = SIZE_LABELS.get(self.nominal_size, self.nominal_size)
+        if self.plies and self.plies > 1:
+            return f"{self.plies}-ply {base}"
+        return base
+
+    def compute_result(self) -> ColumnResult:
+        material = get_material(self.material)
+        plies = 1 if material.is_glulam else self.plies
+        section = Section.from_nominal(self.nominal_size, plies=plies)
+        ld_in = (self.unbraced_length_d_ft or self.height_ft) * 12
+        lb_in = (self.unbraced_length_b_ft or self.height_ft) * 12
+        return design_column(
+            {
+                "dead": self.dead_load_lb,
+                "live": self.live_load_lb,
+                "snow": self.snow_load_lb,
+                "roof_live": self.roof_live_load_lb,
+                "wind": self.wind_load_lb,
+            },
+            section=section,
+            material=material,
+            unbraced_length_d=ld_in,
+            unbraced_length_b=lb_in,
+            ke=float(self.end_condition),
         )

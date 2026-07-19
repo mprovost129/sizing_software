@@ -5,6 +5,7 @@ philosophy: the calculation engine is the foundation every interface
 (web, API, CLI, AI assistant) builds on, not the other way around.
 """
 from .checks import BeamDesignResult, CheckResult, design_beam
+from .columns import ColumnResult, design_column
 from .factors import (
     DEFLECTION_LIMITS,
     MEMBER_TYPE_LABELS,
@@ -49,6 +50,8 @@ __all__ = [
     "UniformLoad",
     "PointLoad",
     "design_beam",
+    "design_column",
+    "ColumnResult",
     "BeamDesignResult",
     "CheckResult",
     "MEMBER_TYPE_LABELS",

@@ -1,9 +1,16 @@
 from django.contrib import admin
 
-from .models import BeamDesign, BeamProject, BeamProjectIssue
+from .models import BeamDesign, BeamProject, BeamProjectIssue, ColumnDesign
 
 admin.site.register(BeamProject)
 admin.site.register(BeamProjectIssue)
+
+
+@admin.register(ColumnDesign)
+class ColumnDesignAdmin(admin.ModelAdmin):
+    list_display = ("__str__", "user", "material", "nominal_size", "plies", "height_ft", "created_at")
+    list_filter = ("material", "nominal_size")
+    search_fields = ("name", "user__email")
 
 
 @admin.register(BeamDesign)

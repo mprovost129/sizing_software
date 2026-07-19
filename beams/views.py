@@ -16,6 +16,7 @@ from engine import (
     clear_span,
     default_deflection_settings,
     design_beam,
+    design_column,
     get_material,
 )
 from engine.sections import GLULAM_SIZES, LVL_SIZES, NOMINAL_SIZES
@@ -31,6 +32,7 @@ from .continuous import (
 from .forms import (
     BeamDesignForm,
     BeamProjectForm,
+    ColumnDesignForm,
     DistributedLoadFormSet,
     PointLoadFormSet,
 )
@@ -45,8 +47,9 @@ from .models import (
     BeamProject,
     BeamProjectIssue,
     BeamProjectIssueMember,
+    ColumnDesign,
 )
-from .pdf import render_beam_design_pdf, render_project_pdf
+from .pdf import render_beam_design_pdf, render_column_design_pdf, render_project_pdf
 
 MEMBER_TYPE_LABEL_MAP = dict(MEMBER_TYPE_CHOICES)
 
@@ -526,6 +529,101 @@ class BeamDesignView(LoginRequiredMixin, View):
         return render(request, self.template_name, context)
 
 
+def _saved_columns(request):
+    return ColumnDesign.objects.filter(user=request.user).select_related("project")[:20]
+
+
+class ColumnDesignView(LoginRequiredMixin, View):
+    """Axial-compression (column / post) designer: run the check, or save
+    it as a ColumnDesign (optionally under a project)."""
+    template_name = "beams/column.html"
+
+    def get(self, request):
+        return render(request, self.template_name, {
+            "form": ColumnDesignForm(user=request.user),
+            "saved_columns": _saved_columns(request),
+        })
+
+    def post(self, request):
+        form = ColumnDesignForm(request.POST, user=request.user)
+        context = {"form": form, "saved_columns": _saved_columns(request)}
+        if not form.is_valid():
+            return render(request, self.template_name, context)
+        data = form.cleaned_data
+        material = get_material(data["material"])
+        plies = 1 if material.is_glulam else (data.get("plies") or 1)
+
+        if request.POST.get("action") == "save":
+            column = ColumnDesign.objects.create(
+                user=request.user,
+                project=data.get("project"),
+                name=data.get("name") or "",
+                material=data["material"],
+                nominal_size=data["nominal_size"],
+                plies=plies,
+                dead_load_lb=data.get("dead_load_lb") or 0,
+                live_load_lb=data.get("live_load_lb") or 0,
+                snow_load_lb=data.get("snow_load_lb") or 0,
+                roof_live_load_lb=data.get("roof_live_load_lb") or 0,
+                wind_load_lb=data.get("wind_load_lb") or 0,
+                height_ft=data["height_ft"],
+                unbraced_length_d_ft=data.get("unbraced_length_d_ft"),
+                unbraced_length_b_ft=data.get("unbraced_length_b_ft"),
+                end_condition=data["end_condition"],
+            )
+            return redirect("beams:column_detail", pk=column.pk)
+
+        section = Section.from_nominal(data["nominal_size"], plies=plies)
+        ld_in = (data.get("unbraced_length_d_ft") or data["height_ft"]) * 12
+        lb_in = (data.get("unbraced_length_b_ft") or data["height_ft"]) * 12
+        context["result"] = design_column(
+            {
+                "dead": data.get("dead_load_lb") or 0,
+                "live": data.get("live_load_lb") or 0,
+                "snow": data.get("snow_load_lb") or 0,
+                "roof_live": data.get("roof_live_load_lb") or 0,
+                "wind": data.get("wind_load_lb") or 0,
+            },
+            section=section,
+            material=material,
+            unbraced_length_d=ld_in,
+            unbraced_length_b=lb_in,
+            ke=float(data["end_condition"]),
+        )
+        context["height_ft"] = data["height_ft"]
+        return render(request, self.template_name, context)
+
+
+class ColumnDesignDetailView(LoginRequiredMixin, View):
+    template_name = "beams/column_detail.html"
+
+    def get(self, request, pk):
+        column = get_object_or_404(ColumnDesign, pk=pk, user=request.user)
+        return render(request, self.template_name, {
+            "column": column,
+            "result": column.compute_result(),
+            "height_ft": column.height_ft,
+        })
+
+
+class ColumnDesignDeleteView(LoginRequiredMixin, View):
+    def post(self, request, pk):
+        column = get_object_or_404(ColumnDesign, pk=pk, user=request.user)
+        column.delete()
+        messages.success(request, "Column design deleted.")
+        return redirect("beams:column")
+
+
+class ColumnDesignExportPDFView(LoginRequiredMixin, View):
+    def get(self, request, pk):
+        column = get_object_or_404(ColumnDesign, pk=pk, user=request.user)
+        pdf_bytes = render_column_design_pdf(column, column.compute_result())
+        response = HttpResponse(pdf_bytes, content_type="application/pdf")
+        filename = (column.name or f"column-{column.pk}").replace(" ", "_")
+        response["Content-Disposition"] = f'attachment; filename="{filename}.pdf"'
+        return response
+
+
 class BeamDesignListView(LoginRequiredMixin, ListView):
     model = BeamDesign
     template_name = "beams/list.html"
@@ -618,9 +716,14 @@ class BeamProjectDetailView(LoginRequiredMixin, View):
             (design, design.compute_result())
             for design in project.designs.filter(revisions__isnull=True)
         ]
+        column_rows = [
+            (column, column.compute_result())
+            for column in project.column_designs.all()
+        ]
         return render(request, self.template_name, {
             "project": project,
             "rows": rows,
+            "column_rows": column_rows,
             "passing_count": sum(1 for _, result in rows if result.passed),
             "failing_count": sum(1 for _, result in rows if not result.passed),
             "issues": project.issues.select_related("created_by").all(),
@@ -679,6 +782,28 @@ class BeamProjectExportCSVView(LoginRequiredMixin, View):
                 "PASS" if result.passed else "FAIL",
                 design.created_at.isoformat(),
             ])
+        columns = project.column_designs.all()
+        if columns:
+            writer.writerow([])
+            writer.writerow(["Columns"])
+            writer.writerow([
+                "Name", "Material", "Section", "Height (ft)", "Slenderness le/d", "CP",
+                "Governing check", "Ratio", "Status", "Created",
+            ])
+            for column in columns:
+                result = column.compute_result()
+                writer.writerow([
+                    column.name or f"Column #{column.pk}",
+                    column.get_material_display(),
+                    column.section_label,
+                    f"{column.height_ft:g}",
+                    f"{result.summary.slenderness:.1f}",
+                    f"{result.summary.cp:.3f}",
+                    result.compression.name,
+                    f"{result.compression.ratio:.3f}",
+                    "PASS" if result.passed else "FAIL",
+                    column.created_at.isoformat(),
+                ])
         return response
 
 
@@ -689,7 +814,11 @@ class BeamProjectExportPDFView(LoginRequiredMixin, View):
             (design, design.compute_result())
             for design in project.designs.select_related("project").filter(revisions__isnull=True)
         ]
-        pdf_bytes = render_project_pdf(project, design_results)
+        column_results = [
+            (column, column.compute_result())
+            for column in project.column_designs.all()
+        ]
+        pdf_bytes = render_project_pdf(project, design_results, column_results=column_results)
 
         response = HttpResponse(pdf_bytes, content_type="application/pdf")
         filename = project.name.replace(" ", "_") or f"project-{project.pk}"

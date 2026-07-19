@@ -1,0 +1,67 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ column.name|default:"Column Design" }} | FrameCalc{% endblock %}
+
+{% block extra_css %}
+<style>
+.stat-row { display:flex; flex-wrap:wrap; gap:0.6rem; margin-top:0.5rem; }
+.stat-pill { background:var(--fc-surface-2, #f4f6f8); border-radius:8px; padding:0.4rem 0.7rem; min-width:70px; }
+.stat-pill .stat-label { font-size:0.64rem; text-transform:uppercase; color:var(--fc-text-muted); }
+.stat-pill .stat-value { font-size:0.95rem; font-weight:600; }
+.saved-input-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:0.9rem 1.25rem; }
+.saved-input-label { font-size:0.72rem; color:var(--fc-text-muted); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:0.25rem; }
+.saved-input-value { color:var(--fc-gray-900); font-size:0.92rem; }
+@media (max-width:900px){ .saved-input-grid { grid-template-columns:repeat(2,1fr); } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;">
+        <div>
+            <h1 class="page-title">{{ column.name|default:"Column Design" }}</h1>
+            <p class="page-subtitle">
+                {% if column.project %}{{ column.project.name }} &middot; {% endif %}
+                {{ column.section_label }} {{ result.summary.material_name }} &middot;
+                {{ column.height_ft|floatformat:1 }} ft column &middot;
+                Saved {{ column.created_at|date:"M j, Y" }}
+            </p>
+        </div>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+            <a href="{% url 'beams:column_export_pdf' column.pk %}" class="fc-btn fc-btn--secondary">
+                <i class="bi bi-file-earmark-pdf"></i> Export PDF
+            </a>
+            <a href="{% url 'beams:column' %}" class="fc-btn fc-btn--secondary">
+                <i class="bi bi-plus"></i> New Column
+            </a>
+            <form method="post" action="{% url 'beams:column_delete' column.pk %}" onsubmit="return confirm('Delete this column design?');">
+                {% csrf_token %}
+                <button type="submit" class="fc-btn fc-btn--danger"><i class="bi bi-trash"></i> Delete</button>
+            </form>
+        </div>
+    </div>
+
+    {% include 'beams/_column_result.html' with result=result height_ft=column.height_ft %}
+
+    <div class="fc-card" style="margin-top:1rem;">
+        <div class="fc-card-header"><span class="fc-card-title"><i class="bi bi-journal-text"></i> Saved Inputs</span></div>
+        <div class="fc-card-body">
+            <div class="saved-input-grid">
+                <div><div class="saved-input-label">Project</div><div class="saved-input-value">{{ column.project.name|default:"None" }}</div></div>
+                <div><div class="saved-input-label">Section</div><div class="saved-input-value">{{ column.section_label }} {{ result.summary.material_name }}</div></div>
+                <div><div class="saved-input-label">Height</div><div class="saved-input-value">{{ column.height_ft|floatformat:1 }} ft</div></div>
+                <div><div class="saved-input-label">End condition (K<sub>e</sub>)</div><div class="saved-input-value">{{ column.get_end_condition_display }}</div></div>
+                <div><div class="saved-input-label">Unbraced d-axis</div><div class="saved-input-value">{% if column.unbraced_length_d_ft %}{{ column.unbraced_length_d_ft|floatformat:1 }} ft{% else %}= height{% endif %}</div></div>
+                <div><div class="saved-input-label">Unbraced b-axis</div><div class="saved-input-value">{% if column.unbraced_length_b_ft %}{{ column.unbraced_length_b_ft|floatformat:1 }} ft{% else %}= height{% endif %}</div></div>
+                <div style="grid-column:span 2;"><div class="saved-input-label">Axial loads (lb)</div><div class="saved-input-value">
+                    D {{ column.dead_load_lb|floatformat:0 }}, L {{ column.live_load_lb|floatformat:0 }}, S {{ column.snow_load_lb|floatformat:0 }}, Lr {{ column.roof_live_load_lb|floatformat:0 }}, W {{ column.wind_load_lb|floatformat:0 }}
+                </div></div>
+            </div>
+        </div>
+    </div>
+
+    <div style="margin-top:.75rem;">
+        <a href="{% url 'beams:column' %}" class="fc-btn fc-btn--ghost"><i class="bi bi-arrow-left"></i> Column designer</a>
+    </div>
+</div>
+{% endblock %}

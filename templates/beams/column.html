@@ -1,0 +1,173 @@
+{% extends 'base.html' %}
+
+{% block title %}Column Designer | FrameCalc{% endblock %}
+
+{% block extra_css %}
+<style>
+.col-grid { display:grid; grid-template-columns: 1fr 1fr; gap:1rem; }
+.col-field { margin-bottom:0.85rem; }
+.col-field label { display:block; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--fc-text-muted); margin-bottom:0.25rem; }
+.col-loads { display:grid; grid-template-columns: repeat(5, 1fr); gap:0.6rem; }
+.size-btn { padding:0.4rem 0.25rem; font-family:'JetBrains Mono', monospace; font-size:0.78rem; }
+.size-btn--active { outline:2px solid var(--fc-accent); }
+.stat-row { display:flex; flex-wrap:wrap; gap:0.6rem; margin-top:0.5rem; }
+.stat-pill { background:var(--fc-surface-2, #f4f6f8); border-radius:8px; padding:0.4rem 0.7rem; min-width:70px; }
+.stat-pill .stat-label { font-size:0.64rem; text-transform:uppercase; color:var(--fc-text-muted); }
+.stat-pill .stat-value { font-size:0.95rem; font-weight:600; }
+@media (max-width:720px){ .col-grid, .col-loads { grid-template-columns:1fr 1fr; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <h1 class="page-title"><i class="bi bi-bricks"></i> Column / Post Designer</h1>
+        <p class="page-subtitle">Axial compression per NDS 2018 &sect;3.7 &mdash; f<sub>c</sub> = P/A vs F'<sub>c</sub> = F<sub>c</sub> &times; C<sub>D</sub> &times; C<sub>F</sub> &times; C<sub>P</sub>. Dry service, concentric load.</p>
+    </div>
+
+    <form method="post" action="{% url 'beams:column' %}" id="columnForm">
+        {% csrf_token %}
+        <div class="fc-card">
+            <div class="fc-card-body">
+                <div class="col-grid">
+                    <div class="col-field">
+                        <label for="{{ form.material.id_for_label }}">Material</label>
+                        <select name="{{ form.material.html_name }}" id="{{ form.material.id_for_label }}"
+                                onchange="updateColumnSizes()" class="fc-select">
+                            {% for val, label in form.material.field.choices %}
+                            <option value="{{ val }}" {% if form.material.value == val %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-field" id="colPliesGroup">
+                        <label for="{{ form.plies.id_for_label }}">Plies (built-up)</label>
+                        <select name="{{ form.plies.html_name }}" id="{{ form.plies.id_for_label }}" class="fc-select">
+                            {% for val, label in form.plies.field.choices %}
+                            <option value="{{ val }}" {% if form.plies.value|stringformat:'s' == val|stringformat:'s' %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="col-field">
+                    <label>Section</label>
+                    <div style="display:flex;flex-wrap:wrap;gap:0.4rem;" id="colSizeButtons">
+                        {% for val, label in form.nominal_size.field.choices %}
+                        <button type="button" class="size-btn fc-btn fc-btn--secondary {% if form.nominal_size.value == val %}size-btn--active{% endif %}"
+                                data-size="{{ val }}"
+                                data-category="{% if 'lvl_' in val %}lvl{% elif 'gl_' in val %}glulam{% else %}sawn{% endif %}"
+                                style="flex:1 1 3.2rem;" onclick="selectColumnSize(this, '{{ val }}')">{{ label }}</button>
+                        {% endfor %}
+                    </div>
+                    <input type="hidden" name="{{ form.nominal_size.html_name }}" id="columnSizeInput"
+                           value="{{ form.nominal_size.value|default:'2x6' }}">
+                    {% for e in form.nominal_size.errors %}<p class="fc-field-error">{{ e }}</p>{% endfor %}
+                    <p style="font-size:0.72rem;color:var(--fc-text-muted);margin:.3rem 0 0;">Use plies for built-up posts (e.g. a 3-ply 2x6). Glulam sections are monolithic.</p>
+                </div>
+
+                <div class="col-field">
+                    <label>Axial loads (lb)</label>
+                    <div class="col-loads">
+                        {% for f in form %}{% if 'load_lb' in f.name %}
+                        <div>
+                            <span style="font-size:0.68rem;color:var(--fc-text-muted);">{{ f.label|cut:'Axial '|cut:' load (lb)' }}</span>
+                            {{ f }}
+                            {% for e in f.errors %}<p class="fc-field-error">{{ e }}</p>{% endfor %}
+                        </div>
+                        {% endif %}{% endfor %}
+                    </div>
+                </div>
+
+                <div class="col-grid">
+                    <div class="col-field">
+                        <label for="{{ form.height_ft.id_for_label }}">Column height (ft)</label>
+                        {{ form.height_ft }}
+                        {% for e in form.height_ft.errors %}<p class="fc-field-error">{{ e }}</p>{% endfor %}
+                    </div>
+                    <div class="col-field">
+                        <label for="{{ form.end_condition.id_for_label }}">End condition (K<sub>e</sub>)</label>
+                        {{ form.end_condition }}
+                    </div>
+                    <div class="col-field">
+                        <label for="{{ form.unbraced_length_d_ft.id_for_label }}">Unbraced length, d-axis (ft)</label>
+                        {{ form.unbraced_length_d_ft }}
+                    </div>
+                    <div class="col-field">
+                        <label for="{{ form.unbraced_length_b_ft.id_for_label }}">Unbraced length, b-axis (ft)</label>
+                        {{ form.unbraced_length_b_ft }}
+                    </div>
+                </div>
+                {% for e in form.non_field_errors %}<p class="fc-field-error">{{ e }}</p>{% endfor %}
+
+                <div class="col-grid" style="margin-top:0.5rem;align-items:end;">
+                    <div class="col-field" style="margin-bottom:0;">
+                        <label for="{{ form.name.id_for_label }}">Design name (for saving)</label>
+                        {{ form.name }}
+                    </div>
+                    <div class="col-field" style="margin-bottom:0;">
+                        <label for="{{ form.project.id_for_label }}">Project (optional)</label>
+                        {{ form.project }}
+                    </div>
+                </div>
+                <div style="display:flex;gap:0.5rem;margin-top:0.75rem;flex-wrap:wrap;">
+                    <button type="submit" name="action" value="run" class="fc-btn fc-btn--primary fc-btn--lg">
+                        <i class="bi bi-play-fill"></i> Check Column
+                    </button>
+                    <button type="submit" name="action" value="save" class="fc-btn fc-btn--secondary fc-btn--lg">
+                        <i class="bi bi-floppy"></i> Save
+                    </button>
+                </div>
+            </div>
+        </div>
+    </form>
+
+    {% if result %}{% include 'beams/_column_result.html' with result=result height_ft=height_ft %}{% endif %}
+
+    {% if saved_columns %}
+    <div class="fc-card" style="margin-top:1rem;">
+        <div class="fc-card-header">
+            <span class="fc-card-title"><i class="bi bi-archive"></i> Saved Columns</span>
+        </div>
+        <div class="fc-card-body">
+            <div style="display:grid;gap:0.5rem;">
+                {% for col in saved_columns %}
+                {% with cr=col.compute_result %}
+                <a href="{% url 'beams:column_detail' col.pk %}" class="design-card" style="border-left:3px solid {% if cr.passed %}var(--fc-pass-border){% else %}var(--fc-fail-border){% endif %};display:flex;justify-content:space-between;align-items:center;padding:0.6rem 0.85rem;">
+                    <span><strong>{{ col.name|default:"Unnamed column" }}</strong> &middot; {{ col.section_label }} {% if col.project %}&middot; {{ col.project.name }}{% endif %}</span>
+                    <span class="fc-badge fc-badge--{% if cr.passed %}pass{% else %}fail{% endif %}">{{ cr.compression.ratio|floatformat:3 }}</span>
+                </a>
+                {% endwith %}
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function selectColumnSize(btn, size) {
+    document.querySelectorAll('#colSizeButtons .size-btn').forEach(b => b.classList.remove('size-btn--active'));
+    btn.classList.add('size-btn--active');
+    document.getElementById('columnSizeInput').value = size;
+}
+function columnMaterialCategory(v) {
+    v = v || '';
+    if (v.startsWith('lvl_')) return 'lvl';
+    if (v.startsWith('gl_')) return 'glulam';
+    return 'sawn';
+}
+function updateColumnSizes() {
+    const wantCat = columnMaterialCategory(document.getElementById('{{ form.material.id_for_label }}').value);
+    let activeVisible = false, firstVisible = null;
+    document.querySelectorAll('#colSizeButtons .size-btn').forEach(btn => {
+        const match = btn.dataset.category === wantCat;
+        btn.style.display = match ? '' : 'none';
+        if (match) { if (!firstVisible) firstVisible = btn; if (btn.classList.contains('size-btn--active')) activeVisible = true; }
+    });
+    if (!activeVisible && firstVisible) selectColumnSize(firstVisible, firstVisible.dataset.size);
+    const pliesGroup = document.getElementById('colPliesGroup');
+    if (pliesGroup) pliesGroup.style.display = (wantCat === 'glulam') ? 'none' : '';
+}
+document.addEventListener('DOMContentLoaded', updateColumnSizes);
+</script>
+{% endblock %}

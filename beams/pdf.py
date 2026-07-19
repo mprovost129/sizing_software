@@ -504,6 +504,87 @@ def _page_footer(canvas, doc):
     canvas.restoreState()
 
 
+def _column_design_story(column, result, styles):
+    """Flowables for a saved column / post axial-compression report."""
+    story = []
+    section_label_style = ParagraphStyle(
+        "SectionLabel", parent=styles["Heading3"], textColor=NAVY, spaceAfter=6,
+    )
+    s = result.summary
+    c = result.compression
+
+    story.append(Paragraph(column.name or f"Column Design #{column.pk}", styles["Title"]))
+    story.append(Paragraph(
+        f"{column.section_label} {s.material_name} &middot; {column.height_ft:g} ft column &middot; "
+        f"Saved {column.created_at.strftime('%b %d, %Y')}",
+        styles["Normal"],
+    ))
+    if column.project:
+        story.append(Paragraph(f"<b>Project:</b> {escape(column.project.name)}", styles["Normal"]))
+    story.append(Spacer(1, 6))
+    story.append(_status_badge("PASS" if result.passed else "FAIL", result.passed, styles))
+    story.append(Spacer(1, 10))
+
+    story.append(Paragraph("Design Basis", section_label_style))
+    end_label = dict(column._meta.get_field("end_condition").choices).get(column.end_condition, column.end_condition)
+    given = [
+        f"<b>Section:</b> {column.section_label} {s.material_name}",
+        f"<b>Height:</b> {column.height_ft:g} ft &middot; <b>End condition:</b> {end_label}",
+        f"<b>Unbraced length (d axis):</b> {s.unbraced_length_d / 12:g} ft &middot; "
+        f"<b>(b axis):</b> {s.unbraced_length_b / 12:g} ft",
+        f"<b>Axial loads (lb):</b> D {column.dead_load_lb:g}, L {column.live_load_lb:g}, "
+        f"S {column.snow_load_lb:g}, Lr {column.roof_live_load_lb:g}, W {column.wind_load_lb:g}",
+    ]
+    for line in given:
+        story.append(Paragraph(line, styles["Normal"]))
+    story.append(Spacer(1, 10))
+
+    story.append(Paragraph("Section &amp; Stability", section_label_style))
+    story.append(_table([
+        ["Plies", "b (in)", "d (in)", "A (in^2)", "Fc base", "E", "Emin"],
+        [f"{s.section.plies}", f"{s.section.b:.3f}", f"{s.section.d:.3f}", f"{s.section.A:.3f}",
+         f"{s.fc_base:.0f}", f"{s.e:.0f}", f"{s.emin:.0f}"],
+    ]))
+    story.append(Spacer(1, 8))
+    story.append(_table([
+        ["CF", "c", "Ke", "le/d", "le/b", "Slenderness", "FcE", "CP"],
+        [f"{s.cf_c:.2f}", f"{s.c_coefficient}", f"{s.ke:g}",
+         f"{s.le_d / s.section.d:.1f}", f"{s.le_b / s.section.b:.1f}",
+         f"{s.slenderness:.1f}", f"{s.fce:.0f}", f"{s.cp:.3f}"],
+    ]))
+    story.append(Spacer(1, 10))
+
+    story.append(Paragraph("Axial Compression (NDS 3.7)", section_label_style))
+    rows = [["Combo", "CD", "P (lb)", "fc (psi)", "CP", "Fc' (psi)", "Ratio", "Status"]]
+    for combo in s.combos:
+        rows.append([
+            combo.name, f"{combo.cd:g}", f"{combo.p:.0f}", f"{combo.fc:.0f}",
+            f"{combo.cp:.3f}", f"{combo.fc_allow:.0f}", f"{combo.ratio:.3f}",
+            "PASS" if combo.ratio <= 1.0 else "FAIL",
+        ])
+    story.append(_table(rows))
+    story.append(Spacer(1, 8))
+    story.append(Paragraph(
+        f"<b>Governing:</b> {escape(c.name)} &mdash; {c.governing_combo}, ratio {c.ratio:.3f}. "
+        "Dry service, concentric axial load; le/d limited to 50 (NDS 3.7.1.4).",
+        styles["Normal"],
+    ))
+    return story
+
+
+def render_column_design_pdf(column, result) -> bytes:
+    """Render one saved column design and its computed result to PDF bytes."""
+    buffer = io.BytesIO()
+    doc = _pdf_document(buffer, column.name or f"Column design #{column.pk}")
+    styles = getSampleStyleSheet()
+    doc.build(
+        _column_design_story(column, result, styles),
+        onFirstPage=_page_footer,
+        onLaterPages=_page_footer,
+    )
+    return buffer.getvalue()
+
+
 def render_beam_design_pdf(design, result) -> bytes:
     """Render one saved design and its computed result to PDF bytes."""
     buffer = io.BytesIO()
@@ -517,8 +598,11 @@ def render_beam_design_pdf(design, result) -> bytes:
     return buffer.getvalue()
 
 
-def render_project_pdf(project, design_results, issue=None) -> bytes:
-    """Render a project cover sheet followed by every full member report."""
+def render_project_pdf(project, design_results, issue=None, column_results=None) -> bytes:
+    """Render a project cover sheet followed by every full member report.
+    ``column_results`` is an optional list of (ColumnDesign, ColumnResult)
+    for the current package; issue packages (snapshots) stay beams-only."""
+    column_results = column_results or []
     buffer = io.BytesIO()
     package_label = issue.label if issue else "Current Calculation Package"
     doc = _pdf_document(buffer, f"{project.name} - {package_label}")
@@ -539,6 +623,8 @@ def render_project_pdf(project, design_results, issue=None) -> bytes:
     project_rows.append(["Site address", escape(project.site_address) if project.site_address else "Not entered"])
     project_rows.append(["Last updated", project.updated_at.strftime("%Y-%m-%d")])
     project_rows.append(["Member designs", str(len(design_results))])
+    if column_results:
+        project_rows.append(["Columns", str(len(column_results))])
     if issue:
         project_rows.append(["Issue date", issue.created_at.strftime("%Y-%m-%d %H:%M")])
         prepared_by = issue.created_by.email if issue.created_by else "Unknown"
@@ -546,11 +632,12 @@ def render_project_pdf(project, design_results, issue=None) -> bytes:
     story.append(_table(project_rows, col_widths=[1.4 * inch, 4.8 * inch]))
     story.append(Spacer(1, 14))
 
-    passing_count = sum(1 for _, result in design_results if result.passed)
-    failing_count = len(design_results) - passing_count
+    all_results = list(design_results) + list(column_results)
+    passing_count = sum(1 for _, result in all_results if result.passed)
+    failing_count = len(all_results) - passing_count
     story.append(_table([
         ["Package Status", "Passing", "Failing"],
-        ["COMPLETE" if design_results else "NO DESIGNS", str(passing_count), str(failing_count)],
+        ["COMPLETE" if all_results else "NO DESIGNS", str(passing_count), str(failing_count)],
     ], col_widths=[2.1 * inch, 1.2 * inch, 1.2 * inch]))
     story.append(Spacer(1, 14))
 
@@ -572,6 +659,24 @@ def render_project_pdf(project, design_results, issue=None) -> bytes:
         summary_rows,
         col_widths=[1.1 * inch, 0.35 * inch, 0.7 * inch, 0.55 * inch, 0.7 * inch, 1.05 * inch, 0.5 * inch, 0.5 * inch],
     ))
+
+    if column_results:
+        story.append(Spacer(1, 12))
+        story.append(Paragraph("Columns", styles["Heading3"]))
+        column_summary = [["Column", "Section", "Height (ft)", "Governing", "Ratio", "Status"]]
+        for column, result in column_results:
+            column_summary.append([
+                Paragraph(escape(column.name or f"Column #{column.pk}"), styles["Normal"]),
+                column.section_label,
+                f"{column.height_ft:g}",
+                Paragraph(escape(result.compression.name), styles["Normal"]),
+                f"{result.compression.ratio:.3f}",
+                "PASS" if result.passed else "FAIL",
+            ])
+        story.append(_table(
+            column_summary,
+            col_widths=[1.3 * inch, 0.9 * inch, 0.8 * inch, 1.9 * inch, 0.6 * inch, 0.6 * inch],
+        ))
 
     if project.notes:
         story.extend([
@@ -598,6 +703,9 @@ def render_project_pdf(project, design_results, issue=None) -> bytes:
     for design, result in design_results:
         story.append(PageBreak())
         story.extend(_beam_design_story(design, result, styles))
+    for column, result in column_results:
+        story.append(PageBreak())
+        story.extend(_column_design_story(column, result, styles))
 
     doc.build(story, onFirstPage=_page_footer, onLaterPages=_page_footer)
     return buffer.getvalue()

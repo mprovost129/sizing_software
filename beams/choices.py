@@ -38,6 +38,16 @@ DEFAULT_MATERIAL = DEFAULT_MATERIAL_ID
 PLY_CHOICES = [(n, f"{n} ply" if n == 1 else f"{n} plies") for n in (1, 2, 3, 4)]
 DEFAULT_PLIES = 1
 
+# Column end conditions -> effective-length factor Ke (NDS Appendix G,
+# recommended design values). Value is the Ke as a string; the view floats it.
+END_CONDITION_CHOICES = [
+    ("1.0", "Pinned - pinned, no sidesway (Ke = 1.0)"),
+    ("0.8", "Fixed - pinned, no sidesway (Ke = 0.8)"),
+    ("0.65", "Fixed - fixed, no sidesway (Ke = 0.65)"),
+    ("2.1", "Fixed - free / flagpole (Ke = 2.1)"),
+]
+DEFAULT_END_CONDITION = "1.0"
+
 # Service (moisture) condition: dry = interior/protected (CM = 1.0);
 # wet = exterior/damp, MC > 19% (NDS-S Table 4A wet-service factors).
 SERVICE_CONDITION_CHOICES = [

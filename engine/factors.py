@@ -43,6 +43,17 @@ SIZE_FACTORS_FB: dict[str, float] = {
     "2x12": 1.0,   # d = 11.25"  (CF = 1.0 per NDS-S footnote)
 }
 
+# Size factor for Fc (compression parallel to grain), NDS-S Table 4A
+# footnote -- different values than the Fb size factor above. Used for
+# column design. Southern Pine and engineered materials use CF = 1.0.
+SIZE_FACTORS_FC: dict[str, float] = {
+    "2x4":  1.15,
+    "2x6":  1.1,
+    "2x8":  1.05,
+    "2x10": 1.0,
+    "2x12": 1.0,
+}
+
 # Size factor for Ft (tension parallel to grain), per same table footnote.
 # Currently tabulated but not yet applied in design checks (tension check
 # not implemented). Stored here for future use.
@@ -192,6 +203,43 @@ def beam_stability_factor(
     # square root is always real.
     cl = a - (a * a - ratio / 0.95) ** 0.5
     return BeamStability(cl=cl, le=le, rb=rb, fbE=fbE, braced=False, over_slender=rb > RB_MAX)
+
+
+# ---------------------------------------------------------------------------
+# Column stability factor, CP
+# NDS 2018 Section 3.7.1 (axial compression / column buckling). A column
+# too slender to reach its crushing strength buckles first, so Fc is
+# reduced by CP <= 1.0.
+#
+#   FcE = 0.822 * Emin' / (le/d)^2
+#   CP  = (1 + FcE/Fc*)/(2c) - sqrt[ ((1 + FcE/Fc*)/(2c))^2 - (FcE/Fc*)/c ]
+#
+# where Fc* is the reference compression value times every factor except
+# CP, le/d is the governing slenderness ratio, and c = 0.8 for sawn
+# lumber, 0.9 for glulam and structural composite lumber (LVL). The
+# slenderness ratio must not exceed 50 (NDS 3.7.1.4).
+# ---------------------------------------------------------------------------
+SLENDERNESS_MAX: float = 50.0
+
+
+@dataclass(frozen=True)
+class ColumnStability:
+    cp: float           # column stability factor CP (<= 1.0)
+    fce: float          # critical buckling design value FcE, psi
+    slenderness: float  # governing le/d
+    over_slender: bool  # True when le/d exceeds the code limit of 50
+
+
+def column_stability_factor(slenderness: float, emin: float, fc_star: float, c: float) -> ColumnStability:
+    """CP per NDS 3.7.1. ``slenderness`` is the governing le/d, ``fc_star``
+    the reference Fc adjusted by every factor except CP, ``c`` = 0.8 for
+    sawn lumber / 0.9 for glulam and LVL. The discriminant is provably
+    non-negative for c in (0, 1)."""
+    fce = 0.822 * emin / (slenderness * slenderness)
+    alpha = fce / fc_star
+    k = (1.0 + alpha) / (2.0 * c)
+    cp = k - (k * k - alpha / c) ** 0.5
+    return ColumnStability(cp=cp, fce=fce, slenderness=slenderness, over_slender=slenderness > SLENDERNESS_MAX)
 
 
 # ---------------------------------------------------------------------------

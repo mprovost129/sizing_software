@@ -28,6 +28,9 @@
                     <a href="{% url 'beams:list' %}" class="nav-link {% if request.resolver_match.app_name == 'beams' %}active{% endif %}">
                         <i class="bi bi-archive"></i> Designs
                     </a>
+                    <a href="{% url 'beams:column' %}" class="nav-link {% if request.resolver_match.url_name == 'column' %}active{% endif %}">
+                        <i class="bi bi-bricks"></i> Column
+                    </a>
                     <a href="{% url 'core:guide' %}" class="nav-link {% if request.resolver_match.url_name == 'guide' %}active{% endif %}">
                         <i class="bi bi-book"></i> Guide
                     </a>

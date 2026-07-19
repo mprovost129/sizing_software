@@ -6,6 +6,10 @@ app_name = "beams"
 
 urlpatterns = [
     path("design/", views.BeamDesignView.as_view(), name="design"),
+    path("column/", views.ColumnDesignView.as_view(), name="column"),
+    path("column/<int:pk>/", views.ColumnDesignDetailView.as_view(), name="column_detail"),
+    path("column/<int:pk>/delete/", views.ColumnDesignDeleteView.as_view(), name="column_delete"),
+    path("column/<int:pk>/export/pdf/", views.ColumnDesignExportPDFView.as_view(), name="column_export_pdf"),
     path("load-templates/create/", views.BeamLoadTemplateCreateView.as_view(), name="create_load_template"),
     path("load-templates/<int:pk>/delete/", views.BeamLoadTemplateDeleteView.as_view(), name="delete_load_template"),
     path("projects/new/", views.BeamProjectCreateView.as_view(), name="project_create"),
