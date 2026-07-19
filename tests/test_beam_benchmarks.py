@@ -445,6 +445,49 @@ def test_column_stability_and_axial_check_nds_3_7():
     assert glulam.summary.cf_c == 1.0
 
 
+def test_posts_and_timbers_and_4x_sizes():
+    # Posts & Timbers (NDS-S Table 4D) are a distinct "timber" category:
+    # lower reference values than dimension lumber, no Cr, CF = 1.0, dry.
+    # 6x6 DF-L No.1 P&T (b = d = 5.5, A = 30.25), 10 ft column, Ke = 1.0,
+    # 10,000 lb dead + 5,000 lb live, D+L governing:
+    #   Fc = 1000 psi (Table 4D, well below dimension-lumber DF-L No.1)
+    #   slenderness = 120/5.5 = 21.82; FcE = 0.822*580000/21.82^2 = 1001 psi
+    #   Fc* = 1000; alpha = 1.001; c = 0.8 -> CP = 0.692
+    #   Fc' = 692 psi; fc = 15000/30.25 = 496 psi; ratio = 0.717
+    timber = get_material("pt_dfl_no1")
+    assert timber.is_timber is True
+    column = design_column(
+        {"dead": 10000, "live": 5000}, Section.from_nominal("pt_6x6"), timber,
+        unbraced_length_d=120.0, unbraced_length_b=120.0, ke=1.0,
+    )
+    assert column.summary.section.label == "6x6"
+    assert column.summary.cf_c == 1.0            # no size factor for P&T
+    assert column.summary.c_coefficient == 0.8   # sawn timber
+    assert column.summary.slenderness == pytest.approx(21.818, abs=0.01)
+    assert column.summary.cp == pytest.approx(0.692, abs=0.003)
+    assert column.compression.ratio == pytest.approx(0.717, abs=0.003)
+
+    # A P&T member used as a beam takes no Cr and no wet-service CM, even
+    # when both are requested (it is a single solid timber, dry-modelled).
+    beam = design_beam(
+        10.0, [UniformLoad(w=100, load_type="dead"), UniformLoad(w=200, load_type="live")],
+        Section.from_nominal("pt_6x8"), timber, repetitive=True, wet_service=True,
+    )
+    assert beam.summary.material_category == "timber"
+    assert beam.summary.cf == 1.0
+    assert beam.summary.cr == 1.0
+    assert beam.summary.wet_service is False
+
+    # 4x4 / 4x6 are dimension lumber (existing materials): they carry the
+    # usual size factors (Fc CF = 1.1 for 4x6) and section geometry.
+    dl_column = design_column(
+        {"dead": 8000}, Section.from_nominal("4x6"), get_material("dfl_no2"),
+        unbraced_length_d=96.0, unbraced_length_b=96.0, ke=1.0,
+    )
+    assert dl_column.summary.section.A == pytest.approx(3.5 * 5.5)
+    assert dl_column.summary.cf_c == pytest.approx(1.1)
+
+
 def test_off_center_point_load_reactions():
     # 10 ft span, single 800 lb point load 4 ft from the left support.
     # R1 = P*b/L = 800*6/10 = 480 lb, R2 = P*a/L = 800*4/10 = 320 lb

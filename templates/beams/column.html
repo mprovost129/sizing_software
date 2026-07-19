@@ -55,7 +55,7 @@
                         {% for val, label in form.nominal_size.field.choices %}
                         <button type="button" class="size-btn fc-btn fc-btn--secondary {% if form.nominal_size.value == val %}size-btn--active{% endif %}"
                                 data-size="{{ val }}"
-                                data-category="{% if 'lvl_' in val %}lvl{% elif 'gl_' in val %}glulam{% else %}sawn{% endif %}"
+                                data-category="{% if 'lvl_' in val %}lvl{% elif 'gl_' in val %}glulam{% elif 'pt_' in val %}timber{% else %}sawn{% endif %}"
                                 style="flex:1 1 3.2rem;" onclick="selectColumnSize(this, '{{ val }}')">{{ label }}</button>
                         {% endfor %}
                     </div>
@@ -154,6 +154,7 @@ function columnMaterialCategory(v) {
     v = v || '';
     if (v.startsWith('lvl_')) return 'lvl';
     if (v.startsWith('gl_')) return 'glulam';
+    if (v.startsWith('pt_')) return 'timber';
     return 'sawn';
 }
 function updateColumnSizes() {
@@ -166,7 +167,7 @@ function updateColumnSizes() {
     });
     if (!activeVisible && firstVisible) selectColumnSize(firstVisible, firstVisible.dataset.size);
     const pliesGroup = document.getElementById('colPliesGroup');
-    if (pliesGroup) pliesGroup.style.display = (wantCat === 'glulam') ? 'none' : '';
+    if (pliesGroup) pliesGroup.style.display = (wantCat === 'glulam' || wantCat === 'timber') ? 'none' : '';
 }
 document.addEventListener('DOMContentLoaded', updateColumnSizes);
 </script>

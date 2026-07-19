@@ -301,7 +301,7 @@ class BeamDesignForm(forms.Form):
         if material and nominal_size:
             material_cat = MATERIAL_CATEGORY.get(material, "sawn")
             size_cat = SIZE_CATEGORY.get(nominal_size, "sawn")
-            cat_label = {"sawn": "sawn-lumber", "lvl": "LVL", "glulam": "glulam"}
+            cat_label = {"sawn": "sawn-lumber", "lvl": "LVL", "glulam": "glulam", "timber": "post/timber"}
             if material_cat != size_cat:
                 self.add_error(
                     "nominal_size",
@@ -315,7 +315,7 @@ class BeamDesignForm(forms.Form):
                     "use a dry service condition or a sawn material.",
                 )
             # Glulam is a monolithic section, not a built-up member.
-            if material_cat == "glulam" and cleaned.get("plies", 1) and cleaned["plies"] > 1:
+            if material_cat in ("glulam", "timber") and cleaned.get("plies", 1) and cleaned["plies"] > 1:
                 cleaned["plies"] = 1
         # Deflection limits are left as-is here (None when blank). Blanks
         # are resolved to the member-type default at use time: the view
@@ -402,13 +402,13 @@ class ColumnDesignForm(forms.Form):
         if material and nominal_size:
             material_cat = MATERIAL_CATEGORY.get(material, "sawn")
             size_cat = SIZE_CATEGORY.get(nominal_size, "sawn")
-            cat_label = {"sawn": "sawn-lumber", "lvl": "LVL", "glulam": "glulam"}
+            cat_label = {"sawn": "sawn-lumber", "lvl": "LVL", "glulam": "glulam", "timber": "post/timber"}
             if material_cat != size_cat:
                 self.add_error(
                     "nominal_size",
                     f"A {cat_label[material_cat]} material needs a {cat_label[material_cat]} section.",
                 )
-            if material_cat == "glulam" and cleaned.get("plies", 1) and cleaned["plies"] > 1:
+            if material_cat in ("glulam", "timber") and cleaned.get("plies", 1) and cleaned["plies"] > 1:
                 cleaned["plies"] = 1
         if not (cleaned.get("dead_load_lb") or cleaned.get("live_load_lb")
                 or cleaned.get("snow_load_lb") or cleaned.get("roof_live_load_lb")

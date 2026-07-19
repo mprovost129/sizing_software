@@ -8,13 +8,17 @@ total width is that single-ply width times the ply count. Sawn plies are
 """
 from dataclasses import dataclass
 
-# sawn nominal size -> (single-ply actual width in., actual depth in.)
+# sawn nominal size -> (single-ply actual width in., actual depth in.).
+# 4x4 and 4x6 are dimension lumber (NDS-S Table 4A), commonly used as
+# small solid posts; larger solid posts are Posts & Timbers (below).
 _SAWN_SIZES = {
     "2x4": (1.5, 3.5),
     "2x6": (1.5, 5.5),
     "2x8": (1.5, 7.25),
     "2x10": (1.5, 9.25),
     "2x12": (1.5, 11.25),
+    "4x4": (3.5, 3.5),
+    "4x6": (3.5, 5.5),
 }
 
 # LVL size id -> (single-lamination width 1.75", depth in.). LVL is built
@@ -72,14 +76,29 @@ GLULAM_SIZE_LABELS = {
     "gl_6.75x21": '6-3/4x21"',
 }
 
-# Size id -> human depth/section label, across every engineered family.
-SIZE_LABELS = {**LVL_SIZE_LABELS, **GLULAM_SIZE_LABELS}
+# Posts & Timbers (solid sawn timbers, 5x5 and larger; NDS-S Table 4D).
+# Monolithic (single-ply) sections; id prefix "pt_". (width in, depth in).
+_TIMBER_SIZES = {
+    "pt_6x6": (5.5, 5.5),
+    "pt_6x8": (5.5, 7.5),
+    "pt_8x8": (7.5, 7.5),
+}
 
-_ALL_SIZES = {**_SAWN_SIZES, **_LVL_SIZES, **_GLULAM_SIZES}
+TIMBER_SIZE_LABELS = {
+    "pt_6x6": "6x6",
+    "pt_6x8": "6x8",
+    "pt_8x8": "8x8",
+}
+
+# Size id -> human depth/section label, across every engineered/timber family.
+SIZE_LABELS = {**LVL_SIZE_LABELS, **GLULAM_SIZE_LABELS, **TIMBER_SIZE_LABELS}
+
+_ALL_SIZES = {**_SAWN_SIZES, **_LVL_SIZES, **_GLULAM_SIZES, **_TIMBER_SIZES}
 
 NOMINAL_SIZES = tuple(_SAWN_SIZES)  # sawn only (existing dropdown/choices)
 LVL_SIZES = tuple(_LVL_SIZES)
 GLULAM_SIZES = tuple(_GLULAM_SIZES)
+TIMBER_SIZES = tuple(_TIMBER_SIZES)
 
 
 @dataclass(frozen=True)

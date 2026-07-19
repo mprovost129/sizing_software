@@ -45,8 +45,12 @@ LESSER of CV and the beam stability factor CL, never both. Cr does not
 apply and it is modelled dry-service only. The seeded combinations are
 treated as BALANCED layups (Fb+ = Fb-), so the single Fb is valid for both
 positive and negative moment (safe for continuous/cantilever members);
-cross-check against your NDS-S like the non-SPF sawn values. Steel is
-still intentionally not here yet.
+cross-check against your NDS-S like the non-SPF sawn values.
+
+Posts & Timbers (category="timber", NDS-S Table 4D) are solid sawn timbers
+5x5 and larger with their own, LOWER reference values than dimension
+lumber. They take no Cr, CF = 1.0 for the common sizes (d <= 12"), and are
+modelled dry-service. Steel is still intentionally not here yet.
 ============================================================================
 """
 from dataclasses import dataclass
@@ -86,6 +90,10 @@ class Material:
     @property
     def is_glulam(self) -> bool:
         return self.category == "glulam"
+
+    @property
+    def is_timber(self) -> bool:
+        return self.category == "timber"
 
 
 # ---------------------------------------------------------------------------
@@ -201,6 +209,29 @@ _LIBRARY = [
         species="Laminated veneer lumber", grade="2.1E",
         Fb=3100, Ft=1855, Fv=285, Fc_perp=750, Fc=2990, E=2_100_000, Emin=1_089_000, G=0.50,
         category="lvl", cv_exponent=0.136, cv_reference_depth=12.0,
+    ),
+    # --- Posts & Timbers (solid sawn timber, NDS-S Table 4B/4D) ------------
+    # Douglas Fir-Larch P&T (5x5 and larger). Distinct, LOWER reference
+    # values than DF-L dimension lumber -- P&T grading differs. Modelled as
+    # category "timber": no Cr, CF = 1.0 (for d <= 12"), dry-service.
+    # Representative values -- cross-check against NDS-S Table 4D.
+    Material(
+        id="pt_dfl_ss", name="Douglas Fir-Larch Select Structural (Posts & Timbers)",
+        species="Douglas Fir-Larch", grade="Select Structural (P&T)",
+        Fb=1600, Ft=825, Fv=170, Fc_perp=625, Fc=1150, E=1_600_000, Emin=580_000, G=0.50,
+        category="timber",
+    ),
+    Material(
+        id="pt_dfl_no1", name="Douglas Fir-Larch No. 1 (Posts & Timbers)",
+        species="Douglas Fir-Larch", grade="No. 1 (P&T)",
+        Fb=1200, Ft=675, Fv=170, Fc_perp=625, Fc=1000, E=1_600_000, Emin=580_000, G=0.50,
+        category="timber",
+    ),
+    Material(
+        id="pt_dfl_no2", name="Douglas Fir-Larch No. 2 (Posts & Timbers)",
+        species="Douglas Fir-Larch", grade="No. 2 (P&T)",
+        Fb=750, Ft=425, Fv=170, Fc_perp=625, Fc=700, E=1_300_000, Emin=470_000, G=0.50,
+        category="timber",
     ),
     # --- Glued-laminated timber (ENGINEERED) -------------------------------
     # Generic stress classes, NDS 2018-S Table 5A (Douglas Fir, dry),

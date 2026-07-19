@@ -10,6 +10,8 @@ from engine import (
     PERFORMANCE_PROFILE_LABELS,
     SPAN_MODE_LABELS,
     SUBFLOOR_PROFILE_LABELS,
+    TIMBER_SIZE_LABELS,
+    TIMBER_SIZES,
     material_choices,
 )
 
@@ -20,17 +22,19 @@ NOMINAL_SIZE_CHOICES = [(size, size) for size in NOMINAL_SIZES]
 # '5-1/8x15"' for glulam width x depth).
 LVL_SIZE_CHOICES = [(size, LVL_SIZE_LABELS[size]) for size in LVL_SIZES]
 GLULAM_SIZE_CHOICES = [(size, GLULAM_SIZE_LABELS[size]) for size in GLULAM_SIZES]
-# The size field/model validates against sawn AND engineered ids; the UI
-# shows only the group matching the selected material's category.
-ALL_SIZE_CHOICES = NOMINAL_SIZE_CHOICES + LVL_SIZE_CHOICES + GLULAM_SIZE_CHOICES
+TIMBER_SIZE_CHOICES = [(size, TIMBER_SIZE_LABELS[size]) for size in TIMBER_SIZES]
+# The size field/model validates against sawn AND engineered/timber ids;
+# the UI shows only the group matching the selected material's category.
+ALL_SIZE_CHOICES = NOMINAL_SIZE_CHOICES + LVL_SIZE_CHOICES + GLULAM_SIZE_CHOICES + TIMBER_SIZE_CHOICES
 MATERIAL_CHOICES = material_choices()
-# Material id -> "sawn" | "lvl" | "glulam", and size id -> same, so the
-# picker can filter sizes by category and the form can validate the pair.
+# Material id -> "sawn" | "lvl" | "glulam" | "timber", and size id -> same,
+# so the picker can filter sizes by category and the form validates the pair.
 MATERIAL_CATEGORY = {mid: m.category for mid, m in MATERIALS.items()}
 SIZE_CATEGORY = {
     **{s: "sawn" for s, _ in NOMINAL_SIZE_CHOICES},
     **{s: "lvl" for s, _ in LVL_SIZE_CHOICES},
     **{s: "glulam" for s, _ in GLULAM_SIZE_CHOICES},
+    **{s: "timber" for s, _ in TIMBER_SIZE_CHOICES},
 }
 DEFAULT_MATERIAL = DEFAULT_MATERIAL_ID
 # Built-up members: 1-4 plies fastened side by side (e.g. a 3-ply 2x10

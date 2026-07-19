@@ -29,6 +29,8 @@ from .sections import (
     LVL_SIZES,
     NOMINAL_SIZES,
     SIZE_LABELS,
+    TIMBER_SIZE_LABELS,
+    TIMBER_SIZES,
     Section,
 )
 from .span import SPAN_MODE_LABELS, SpanMode, clear_span
@@ -46,6 +48,8 @@ __all__ = [
     "LVL_SIZE_LABELS",
     "GLULAM_SIZES",
     "GLULAM_SIZE_LABELS",
+    "TIMBER_SIZES",
+    "TIMBER_SIZE_LABELS",
     "SIZE_LABELS",
     "UniformLoad",
     "PointLoad",

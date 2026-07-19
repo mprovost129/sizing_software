@@ -150,7 +150,8 @@ def _run_design(data, loads, nominal_size):
     """Run design_beam for a given nominal size using form data."""
     # Glulam is a monolithic section (no ply multiplier); its size id
     # already encodes the full width.
-    plies = 1 if get_material(data["material"]).is_glulam else (data.get("plies") or 1)
+    material_obj = get_material(data["material"])
+    plies = 1 if (material_obj.is_glulam or material_obj.is_timber) else (data.get("plies") or 1)
     section = Section.from_nominal(nominal_size, plies=plies)
     span_values = full_span_values(data)
     continuous_spans = span_values if len(span_values) > 1 else None
@@ -551,7 +552,7 @@ class ColumnDesignView(LoginRequiredMixin, View):
             return render(request, self.template_name, context)
         data = form.cleaned_data
         material = get_material(data["material"])
-        plies = 1 if material.is_glulam else (data.get("plies") or 1)
+        plies = 1 if (material.is_glulam or material.is_timber) else (data.get("plies") or 1)
 
         if request.POST.get("action") == "save":
             column = ColumnDesign.objects.create(

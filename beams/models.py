@@ -313,7 +313,7 @@ class BeamDesign(models.Model):
         material = get_material(self.material)
         # Glulam is a monolithic section (its size id already encodes the
         # full width), so the ply multiplier never applies to it.
-        plies = 1 if material.is_glulam else self.plies
+        plies = 1 if (material.is_glulam or material.is_timber) else self.plies
         section = Section.from_nominal(self.nominal_size, plies=plies)
         limits = default_deflection_settings(self.member_type, self.performance_profile, self.subfloor_profile)
         return design_beam(
@@ -385,7 +385,7 @@ class ColumnDesign(models.Model):
 
     def compute_result(self) -> ColumnResult:
         material = get_material(self.material)
-        plies = 1 if material.is_glulam else self.plies
+        plies = 1 if (material.is_glulam or material.is_timber) else self.plies
         section = Section.from_nominal(self.nominal_size, plies=plies)
         ld_in = (self.unbraced_length_d_ft or self.height_ft) * 12
         lb_in = (self.unbraced_length_b_ft or self.height_ft) * 12

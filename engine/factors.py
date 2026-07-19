@@ -41,6 +41,8 @@ SIZE_FACTORS_FB: dict[str, float] = {
     "2x8":  1.2,   # d = 7.25"
     "2x10": 1.1,   # d = 9.25"
     "2x12": 1.0,   # d = 11.25"  (CF = 1.0 per NDS-S footnote)
+    "4x4":  1.5,   # dimension lumber, 4" nominal width -> same CF as 2x4
+    "4x6":  1.3,   # 6" nominal width -> same CF as 2x6
 }
 
 # Size factor for Fc (compression parallel to grain), NDS-S Table 4A
@@ -52,6 +54,8 @@ SIZE_FACTORS_FC: dict[str, float] = {
     "2x8":  1.05,
     "2x10": 1.0,
     "2x12": 1.0,
+    "4x4":  1.15,
+    "4x6":  1.1,
 }
 
 # Size factor for Ft (tension parallel to grain), per same table footnote.
