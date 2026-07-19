@@ -1,0 +1,240 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ design.name|default:"Beam Design" }} | FrameCalc{% endblock %}
+
+{% block extra_css %}
+<style>
+.detail-shell {
+    display: grid;
+    gap: 1rem;
+}
+.saved-input-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.9rem 1.25rem;
+}
+.saved-input-item {
+    min-width: 0;
+}
+.saved-input-label {
+    font-size: 0.72rem;
+    color: var(--fc-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 0.25rem;
+}
+.saved-input-value {
+    color: var(--fc-gray-900);
+    font-size: 0.92rem;
+    line-height: 1.45;
+}
+@media (max-width: 1100px) {
+    .saved-input-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+@media (max-width: 700px) {
+    .saved-input-grid {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-container">
+
+    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;">
+        <div>
+            <h1 class="page-title">{{ design.name|default:"Beam Design" }}</h1>
+            <p class="page-subtitle">
+                {% if design.project %}<a href="{% url 'beams:project_detail' design.project.pk %}">{{ design.project.name }}</a> &middot; {% endif %}
+                {{ design.nominal_size }} {{ design.get_material_display }} &middot;
+                {{ design.span_display }} ft {% if design.entered_spans|length > 1 %}spans{% else %}span{% endif %} &middot;
+                {{ design.get_member_type_display }} &middot;
+                Revision {{ design.revision_number }} &middot; Saved {{ design.created_at|date:"M j, Y" }}
+            </p>
+        </div>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+            <a href="{% url 'beams:export_pdf' design.pk %}" class="fc-btn fc-btn--secondary">
+                <i class="bi bi-file-earmark-pdf"></i> Export PDF
+            </a>
+            <a href="{% url 'beams:export_csv' design.pk %}" class="fc-btn fc-btn--secondary">
+                <i class="bi bi-download"></i> Export CSV
+            </a>
+            <a href="{% url 'beams:design' %}?copy={{ design.pk }}" class="fc-btn fc-btn--primary">
+                <i class="bi bi-copy"></i> Open as Copy
+            </a>
+            {% if current_revision.pk == design.pk %}
+            <a href="{% url 'beams:design' %}?revise={{ design.pk }}" class="fc-btn fc-btn--primary">
+                <i class="bi bi-signpost-split"></i> Create Revision
+            </a>
+            {% else %}
+            <a href="{% url 'beams:detail' current_revision.pk %}" class="fc-btn fc-btn--primary">
+                <i class="bi bi-arrow-up-right-circle"></i> Current Revision
+            </a>
+            {% endif %}
+            <a href="{% url 'beams:design' %}" class="fc-btn fc-btn--secondary">
+                <i class="bi bi-plus-lg"></i> New Design
+            </a>
+            <form method="post" action="{% url 'beams:delete' design.pk %}" onsubmit="return confirm('Delete this design?');">
+                {% csrf_token %}
+                <button type="submit" class="fc-btn fc-btn--danger">
+                    <i class="bi bi-trash"></i> Delete
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div class="fc-card" style="margin-bottom:1rem;">
+        <div class="fc-card-header">
+            <span class="fc-card-title"><i class="bi bi-clock-history"></i> Revision History</span>
+            <span style="font-size:.72rem;color:var(--fc-text-muted);">{{ revision_history|length }} saved version{{ revision_history|length|pluralize }}</span>
+        </div>
+        <div class="fc-card-body" style="display:flex;gap:.55rem;flex-wrap:wrap;">
+            {% for revision in revision_history %}
+            <a href="{% url 'beams:detail' revision.pk %}" class="fc-btn {% if revision.pk == design.pk %}fc-btn--primary{% else %}fc-btn--secondary{% endif %}" title="{{ revision.revision_note|default:'No revision note' }}">
+                R{{ revision.revision_number }} &middot; {{ revision.created_at|date:"M j, Y" }}
+            </a>
+            {% endfor %}
+            {% if design.revision_note %}<span style="width:100%;font-size:.78rem;color:var(--fc-text-muted);"><strong>This revision:</strong> {{ design.revision_note }}</span>{% endif %}
+        </div>
+    </div>
+
+    <div class="detail-shell">
+        {% include 'beams/_result_preview.html' with result=result support_type_sequence=support_type_sequence %}
+
+        <div class="fc-card">
+            <div class="fc-card-header">
+                <span class="fc-card-title"><i class="bi bi-journal-text"></i> Saved Inputs</span>
+                <span style="font-size:0.72rem;color:var(--fc-text-muted);">Geometry, loads, supports, and serviceability settings</span>
+            </div>
+            <div class="fc-card-body">
+                <div class="saved-input-grid">
+                    <div class="saved-input-item">
+                        <div class="saved-input-label">Project</div>
+                        <div class="saved-input-value">{{ design.project.name|default:"None" }}</div>
+                    </div>
+                    <div class="saved-input-item">
+                        <div class="saved-input-label">Member</div>
+                        <div class="saved-input-value">{{ design.nominal_size }} {{ design.get_material_display }}</div>
+                    </div>
+                    <div class="saved-input-item">
+                        <div class="saved-input-label">Saved</div>
+                        <div class="saved-input-value">{{ design.created_at|date:"M j, Y" }}</div>
+                    </div>
+                    <div class="saved-input-item">
+                        <div class="saved-input-label">Member Type</div>
+                        <div class="saved-input-value">{{ design.get_member_type_display }}</div>
+                    </div>
+                    <div class="saved-input-item">
+                        <div class="saved-input-label">Performance Target</div>
+                        <div class="saved-input-value">{{ design.get_performance_profile_display }}</div>
+                    </div>
+                    <div class="saved-input-item">
+                        <div class="saved-input-label">Subfloor / Floor Feel</div>
+                        <div class="saved-input-value">{{ design.get_subfloor_profile_display }}</div>
+                    </div>
+                    <div class="saved-input-item">
+                        <div class="saved-input-label">Span Basis</div>
+                        <div class="saved-input-value">{{ design.get_span_mode_display }}</div>
+                    </div>
+                    <div class="saved-input-item">
+                        <div class="saved-input-label">Uniform Load Basis</div>
+                        <div class="saved-input-value">
+                            {{ design.uniform_load_basis|upper }}
+                            {% if design.uniform_load_basis == 'psf' %} @ {{ design.spacing_in }} in o.c.{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="saved-input-item">
+                        <div class="saved-input-label">Spans As Entered</div>
+                        <div class="saved-input-value">{{ design.span_display }} ft</div>
+                    </div>
+                    <div class="saved-input-item">
+                        <div class="saved-input-label">Analysis Geometry</div>
+                        <div class="saved-input-value">
+                            {% if result.summary.support_positions|length > 2 %}
+                                {% for seg in result.summary.span_segments %}
+                                    B{{ forloop.counter }}-B{{ forloop.counter|add:1 }} {{ seg|floatformat:2 }} ft{% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
+                            {% else %}
+                                {{ result.summary.span|floatformat:2 }} ft clear
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="saved-input-item">
+                        <div class="saved-input-label">Supports</div>
+                        <div class="saved-input-value">
+                            {% for support in design.support_schedule %}
+                                {{ support.label }} {{ support.support_type }} / {{ support.bearing_length_in }} in{% if not forloop.last %}<br>{% endif %}
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <div class="saved-input-item">
+                        <div class="saved-input-label">Deflection Limits</div>
+                        <div class="saved-input-value">
+                            Back span L/{{ result.summary.deflection_limit_live|floatformat:0 }} live, L/{{ result.summary.deflection_limit_total|floatformat:0 }} total<br>
+                            Cantilever L/{{ result.summary.cantilever_deflection_limit_live|floatformat:0 }} live, L/{{ result.summary.cantilever_deflection_limit_total|floatformat:0 }} total
+                        </div>
+                    </div>
+
+                    <div class="saved-input-item">
+                        <div class="saved-input-label">Entered Loads</div>
+                        <div class="saved-input-value">
+                            D {{ design.dead_load_plf }} {{ design.uniform_load_basis }},
+                            L {{ design.live_load_plf }} {{ design.uniform_load_basis }},
+                            S {{ design.snow_load_plf }} {{ design.uniform_load_basis }},
+                            Lr {{ design.roof_live_load_plf }} {{ design.uniform_load_basis }},
+                            W {{ design.wind_load_plf }} {{ design.uniform_load_basis }}
+                        </div>
+                    </div>
+                    <div class="saved-input-item">
+                        <div class="saved-input-label">Repetitive Member</div>
+                        <div class="saved-input-value">{% if design.repetitive %}Yes{% else %}No{% endif %}</div>
+                    </div>
+                    <div class="saved-input-item">
+                        <div class="saved-input-label">Overhangs</div>
+                        <div class="saved-input-value">
+                            Left {{ design.left_overhang_ft }} ft, Right {{ design.right_overhang_ft }} ft
+                        </div>
+                    </div>
+                    <div class="saved-input-item">
+                        <div class="saved-input-label">Distributed Zones</div>
+                        <div class="saved-input-value">
+                            {% if design.distributed_loads %}
+                                {% for load in design.distributed_loads %}
+                                    {{ load.w|floatformat:"-2" }} {{ load.basis|upper }}
+                                    {{ load.load_type|title }} from {{ load.start_ft|floatformat:"-2" }} to {{ load.end_ft|floatformat:"-2" }} ft
+                                    ({{ load.w_plf|floatformat:"-2" }} plf){% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
+                            {% else %}
+                                None
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="saved-input-item">
+                        <div class="saved-input-label">Point Loads</div>
+                        <div class="saved-input-value">
+                            {% if design.point_loads %}
+                                {{ design.point_loads|length }} saved point load{{ design.point_loads|length|pluralize }}
+                            {% else %}
+                                None
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% include 'beams/_result_details.html' with result=result %}
+    </div>
+
+    <div style="margin-top:.75rem;">
+        <a href="{% url 'beams:list' %}" class="fc-btn fc-btn--ghost">
+            <i class="bi bi-arrow-left"></i> All designs
+        </a>
+    </div>
+
+</div>
+{% endblock %}

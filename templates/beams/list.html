@@ -1,0 +1,158 @@
+{% extends 'base.html' %}
+
+{% block title %}My Designs | FrameCalc{% endblock %}
+
+{% block content %}
+<div class="page-container">
+
+    <div class="page-header workspace-header">
+        <div>
+            <h1 class="page-title">Saved Designs</h1>
+            <p class="page-subtitle">
+                {% if filters_active %}{{ result_count }} of {% endif %}{{ total_design_count }} design{{ total_design_count|pluralize }} saved
+                {% if project_count %}
+                    &middot; {{ project_count }} project{{ project_count|pluralize }}
+                {% endif %}
+            </p>
+        </div>
+        <div class="workspace-actions">
+            <a href="{% url 'beams:project_create' %}" class="fc-btn fc-btn--secondary">
+                <i class="bi bi-folder-plus"></i> New Project
+            </a>
+            <a href="{% url 'beams:export_list_csv' %}?q={{ search_query|urlencode }}&amp;status={{ status_filter|urlencode }}&amp;project_status={{ project_status_filter|urlencode }}" class="fc-btn fc-btn--secondary">
+                <i class="bi bi-download"></i> Export CSV
+            </a>
+            <a href="{% url 'beams:design' %}" class="fc-btn fc-btn--primary">
+                <i class="bi bi-plus"></i> New Design
+            </a>
+        </div>
+    </div>
+
+    <form method="get" class="fc-card workspace-filters" role="search">
+        <div class="workspace-search">
+            <label for="workspaceSearch">Search projects and designs</label>
+            <input id="workspaceSearch" type="search" name="q" value="{{ search_query }}" class="fc-input"
+                   placeholder="Project, client, address, member, material, or size">
+        </div>
+        <div class="workspace-status">
+            <label for="statusFilter">Design status</label>
+            <select id="statusFilter" name="status" class="fc-select">
+                <option value=""{% if not status_filter %} selected{% endif %}>All statuses</option>
+                <option value="pass"{% if status_filter == 'pass' %} selected{% endif %}>Passing</option>
+                <option value="fail"{% if status_filter == 'fail' %} selected{% endif %}>Failing</option>
+            </select>
+        </div>
+        <div class="workspace-status">
+            <label for="projectStatusFilter">Project status</label>
+            <select id="projectStatusFilter" name="project_status" class="fc-select">
+                <option value="">All projects</option>
+                {% for value, label in project_status_choices %}
+                <option value="{{ value }}"{% if project_status_filter == value %} selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit" class="fc-btn fc-btn--primary"><i class="bi bi-search"></i> Filter</button>
+        {% if filters_active %}
+        <a href="{% url 'beams:list' %}" class="fc-btn fc-btn--secondary">Clear</a>
+        {% endif %}
+    </form>
+
+    {% if projects %}
+    <section class="workspace-projects">
+        <div class="workspace-section-heading">
+            <div>
+                <h2>Project Directory</h2>
+                <p>Open a job to review its design package or start another member.</p>
+            </div>
+            {% if filters_active %}<span>{{ projects|length }} matching project{{ projects|length|pluralize }}</span>{% endif %}
+        </div>
+        <div class="designs-grid">
+            {% for project in projects %}
+            <a href="{% url 'beams:project_detail' project.pk %}" class="design-card project-directory-card">
+                <div class="design-card-top">
+                    <div>
+                        <p class="design-card-name"><i class="bi bi-folder2-open"></i> {{ project.name }}</p>
+                        <p class="design-card-meta">
+                            {% if project.client_name %}{{ project.client_name }}{% else %}No client entered{% endif %}
+                        </p>
+                    </div>
+                    <span class="fc-badge">{{ project.design_count }} design{{ project.design_count|pluralize }}</span>
+                </div>
+                <p class="project-directory-address">
+                    {{ project.get_status_display }}{% if project.project_number %} &middot; {{ project.project_number }}{% endif %}
+                    {% if project.site_address %} &middot; {{ project.site_address }}{% endif %}
+                </p>
+            </a>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    {% if rows %}
+        <div class="workspace-section-heading workspace-design-heading">
+            <div>
+                <h2>Designs</h2>
+                <p>{{ result_count }} design{{ result_count|pluralize }} shown</p>
+            </div>
+        </div>
+        {% for group in project_groups %}
+        <div class="fc-card" style="margin-bottom:1rem;">
+            <div class="fc-card-header">
+                <span class="fc-card-title">
+                    <i class="bi bi-folder2-open"></i>
+                    {% if group.project %}<a href="{% url 'beams:project_detail' group.project.pk %}" style="color:inherit;text-decoration:none;">{{ group.project.name }}</a>{% else %}Unassigned Designs{% endif %}
+                </span>
+                <span style="font-size:0.72rem;color:var(--fc-text-muted);">
+                    {{ group.rows|length }} design{{ group.rows|length|pluralize }}
+                </span>
+            </div>
+            <div class="fc-card-body">
+                <div class="designs-grid">
+                    {% for design, result in group.rows %}
+                    <a href="{% url 'beams:detail' design.pk %}" class="design-card" style="border-left: 3px solid {% if result.passed %}var(--fc-pass-border){% else %}var(--fc-fail-border){% endif %};">
+                        <div class="design-card-top">
+                            <div>
+                                <p class="design-card-name">{{ design.name|default:"Unnamed design" }}</p>
+                                <p class="design-card-meta">{{ design.created_at|date:"M j, Y" }}</p>
+                            </div>
+                            <span class="fc-badge fc-badge--{% if result.passed %}pass{% else %}fail{% endif %}">
+                                {% if result.passed %}PASS{% else %}FAIL{% endif %}
+                            </span>
+                        </div>
+                        <div class="design-card-props">
+                            <span class="design-prop"><strong>{{ design.nominal_size }}</strong> {{ design.get_material_display }}</span>
+                            <span class="design-prop"><strong>{{ design.span_display }} ft</strong> {% if design.entered_spans|length > 1 %}spans{% else %}span{% endif %}</span>
+                            <span class="design-prop">{{ design.get_member_type_display }}</span>
+                            <span class="design-prop">Gov: <strong
+                                class="{% if result.governing.ratio > 1.0 %}check-ratio--fail{% elif result.governing.ratio > 0.85 %}check-ratio--warn{% else %}check-ratio--pass{% endif %}">
+                                {{ result.governing.ratio|floatformat:3 }}
+                            </strong></span>
+                        </div>
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+    <div class="fc-card">
+        <div class="empty-state">
+            {% if filters_active %}
+                <i class="bi bi-search empty-state-icon"></i>
+                <h3>No designs match these filters</h3>
+                <p>Try a broader search or include all design statuses.</p>
+                <a href="{% url 'beams:list' %}" class="fc-btn fc-btn--secondary">Clear Filters</a>
+            {% else %}
+                <i class="bi bi-archive empty-state-icon"></i>
+                <h3>No saved designs yet</h3>
+                <p>Run an analysis and save it to keep a record here.</p>
+                <a href="{% url 'beams:design' %}" class="fc-btn fc-btn--primary">
+                    <i class="bi bi-plus"></i> New Design
+                </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}

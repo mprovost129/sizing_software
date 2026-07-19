@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  beam_viewer.svg  (stretch-safe)
+
+  Derived from the AutoCAD export, with three fixes so it can be scaled to any
+  length and depth without distorting:
+
+    1. The gray face was two triangles sharing a corner-to-corner diagonal.
+       Under non-uniform scale that seam swings across the face. Rebuilt as a
+       single <rect>, so there is no diagonal to shear.
+
+    2. `vector-effect: non-scaling-stroke` pinned every stroke to 1px, so a long
+       span rendered with hairlines and looked flimsy. Removed; strokes now
+       scale with the drawing.
+
+    3. The border was an outer rect and an inner rect ~8.4 units apart. That
+       proportional gap becomes an uneven band once X and Y scale differently.
+       The border is still two rects, but see the note below on how to keep it
+       even.
+
+    Also removed: the export drew the outer border as four separate polylines
+    rather than a closed shape. Three became the outer <rect>; the fourth (the
+    bottom edge, at y=478.118) was a leftover duplicate and has been deleted.
+
+  preserveAspectRatio="none" is set deliberately: it lets the host stretch this
+  to any width/height. Set the size on the <svg> element (or its container) and
+  the geometry follows.
+
+      <object data="beam_viewer.svg" style="width:640px;height:90px"></object>
+      <img src="beam_viewer.svg" style="width:100%;height:120px">
+
+  NOTE ON THE BORDER: because this is a single static file being stretched, the
+  border gap scales with the drawing and will read thicker vertically on a long,
+  shallow beam. That is unavoidable in one static file. If you need a perfectly
+  even border at every aspect ratio, the border has to be drawn at render time
+  in fixed pixels (that is what beam-component.js does). This file is the best
+  a standalone SVG can do.
+-->
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:xlink="http://www.w3.org/1999/xlink"
+     viewBox="0 0 1024 768"
+     preserveAspectRatio="none"
+     version="1.1"
+     stroke-linecap="round"
+     stroke-linejoin="round">
+
+  <defs>
+    <!-- Face fill. Swap this to restyle the beam without touching geometry. -->
+    <linearGradient id="beamFace" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="rgb(150,150,150)"/>
+      <stop offset="55%"  stop-color="rgb(128,128,128)"/>
+      <stop offset="100%" stop-color="rgb(105,105,105)"/>
+    </linearGradient>
+  </defs>
+
+  <!-- ===================================================================
+       BEAM BODY
+       Grouped so it can be targeted, transformed, or restyled on its own.
+       Bearings are intentionally NOT in this file - draw them separately
+       and composite, so the two can be modified independently.
+       =================================================================== -->
+  <g id="beam-body">
+
+    <!-- Inner face: ONE rect, not two triangles. This is the key fix. -->
+    <rect x="18.41" y="298.25" width="987.18" height="171.5"
+          fill="url(#beamFace)"
+          stroke="rgb(255,255,255)"
+          stroke-width="2"/>
+
+    <!-- Outer border -->
+    <rect x="10.04" y="289.88" width="1003.92" height="188.24"
+          fill="none"
+          stroke="rgb(255,255,255)"
+          stroke-width="2"/>
+
+  </g>
+</svg>

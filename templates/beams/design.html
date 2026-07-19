@@ -1,0 +1,2169 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}New Design | FrameCalc{% endblock %}
+
+{% block extra_css %}
+<style>
+.non-field-error {
+    background: var(--fc-fail-bg);
+    border: 1px solid var(--fc-fail-border);
+    border-radius: var(--fc-radius);
+    color: var(--fc-fail);
+    font-size: 0.78rem;
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 1rem;
+}
+.page-container.page-container--beam-designer {
+    max-width: 1680px;
+    padding-top: 1rem;
+}
+.designer-shell {
+    display: grid;
+    gap: 1rem;
+}
+.designer-top {
+    width: 100%;
+}
+.designer-input-card {
+    width: 100%;
+}
+.designer-input-section {
+    width: 100%;
+}
+.designer-input-meta {
+    display: grid;
+    gap: 1rem;
+}
+.member-strip {
+    display: grid;
+    grid-template-columns: 1.3fr auto auto;
+    gap: 1rem;
+    align-items: end;
+}
+.member-toolbar {
+    display: grid;
+    gap: 0.5rem;
+    padding: 0.9rem 1rem;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 14px;
+    background:
+        radial-gradient(circle at top left, rgba(37, 99, 235, 0.08), transparent 24%),
+        linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.96));
+}
+.member-toolbar__top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+.member-toolbar__title {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--fc-gray-900);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+.member-toolbar__copy {
+    font-size: 0.72rem;
+    color: var(--fc-text-muted);
+}
+.member-strip__size {
+    min-width: 0;
+}
+.member-strip__size .fc-label {
+    margin-bottom: 0.45rem;
+}
+.member-strip__actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    justify-content: flex-end;
+}
+.member-strip__actions .fc-btn {
+    white-space: nowrap;
+}
+.member-type-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+}
+.member-type-btn {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 74px;
+    width: 86px;
+    padding: 0.7rem;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 12px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.95));
+    color: var(--fc-gray-800);
+    cursor: pointer;
+    transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+.member-type-btn:hover {
+    border-color: rgba(37, 99, 235, 0.4);
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+    transform: translateY(-1px);
+}
+.member-type-btn--active {
+    border-color: rgba(37, 99, 235, 0.62);
+    background: linear-gradient(180deg, rgba(219, 234, 254, 0.96), rgba(239, 246, 255, 0.96));
+    box-shadow: 0 10px 24px rgba(37, 99, 235, 0.12);
+}
+.member-type-btn::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 8px);
+    transform: translateX(-50%) translateY(4px);
+    padding: 0.35rem 0.5rem;
+    border-radius: 8px;
+    background: rgba(15, 23, 42, 0.92);
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 600;
+    line-height: 1.1;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .16s ease, transform .16s ease;
+    z-index: 5;
+}
+.member-type-btn:hover::after,
+.member-type-btn:focus-visible::after {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+.member-type-btn__icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    color: #1d4ed8;
+}
+.member-type-btn__icon img {
+    display: block;
+    width: 48px;
+    height: 48px;
+    object-fit: contain;
+}
+.member-type-btn__icon .bi {
+    font-size: 2rem;
+}
+.member-type-select-fallback {
+    display: none;
+}
+.input-grid--three {
+    display: grid;
+    grid-template-columns: 2fr 1fr 2fr;
+    gap: 0.75rem;
+}
+.input-grid--equal-three {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.75rem;
+}
+.input-grid--two {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+}
+.input-grid--five {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+.input-grid--four {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.75rem;
+}
+.point-load-rows {
+    display: grid;
+    gap: 0.65rem;
+}
+.point-load-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.15fr) minmax(0, 0.9fr) auto;
+    gap: 0.65rem;
+    align-items: end;
+    padding: 0.75rem;
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    border-radius: 14px;
+    background: rgba(248, 250, 252, 0.7);
+}
+.point-load-row.is-hidden {
+    display: none;
+}
+.point-load-row__action {
+    display: flex;
+    align-items: flex-end;
+    justify-content: flex-end;
+    gap: 0.35rem;
+}
+.load-action-buttons {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+.load-template-bar {
+    display: grid;
+    grid-template-columns: minmax(180px, 1.2fr) auto minmax(180px, 1fr) auto;
+    gap: 0.55rem;
+    align-items: end;
+    padding: 0.8rem;
+    margin-bottom: 1rem;
+    border: 1px solid rgba(45, 125, 210, 0.2);
+    border-radius: 14px;
+    background: linear-gradient(135deg, rgba(239, 246, 255, 0.82), rgba(248, 250, 252, 0.92));
+}
+.load-template-status {
+    grid-column: 1 / -1;
+    min-height: 1em;
+    margin: 0;
+    font-size: 0.7rem;
+    color: var(--fc-text-muted);
+}
+.point-load-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+}
+.point-load-counter {
+    font-size: 0.72rem;
+    color: var(--fc-text-muted);
+}
+.distributed-load-rows {
+    display: grid;
+    gap: 0.65rem;
+}
+.distributed-load-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.85fr) auto;
+    gap: 0.65rem;
+    align-items: end;
+    padding: 0.75rem;
+    border: 1px solid rgba(45, 125, 210, 0.2);
+    border-radius: 14px;
+    background: rgba(239, 246, 255, 0.62);
+}
+.distributed-load-row.is-hidden {
+    display: none;
+}
+.continuous-span-card {
+    margin-top: 1rem;
+    background:
+        radial-gradient(circle at top right, rgba(37, 99, 235, 0.08), transparent 28%),
+        linear-gradient(180deg, #f8fbff 0%, #f4f7fb 100%);
+}
+.continuous-span-card .fc-card-header {
+    align-items: start;
+}
+.continuous-span-note {
+    font-size: 0.72rem;
+    color: var(--fc-text-muted);
+    margin: 0;
+}
+.continuous-span-stack {
+    display: grid;
+    gap: 0.85rem;
+}
+.continuous-span-row {
+    display: grid;
+    grid-template-columns: 92px minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0.75rem;
+    align-items: end;
+    padding: 0.9rem 1rem;
+    border: 1px solid rgba(148, 163, 184, 0.24);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.82);
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+}
+.continuous-span-row--error {
+    border-color: var(--fc-fail-border);
+    background: linear-gradient(180deg, rgba(254, 242, 242, 0.9), rgba(255, 255, 255, 0.95));
+}
+.continuous-span-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+    padding: 0.35rem 0.6rem;
+    border-radius: 999px;
+    background: #e0ecff;
+    color: #1d4ed8;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+.continuous-span-chip--error {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+.continuous-span-row .fc-form-group {
+    margin-bottom: 0;
+}
+.continuous-span-label {
+    font-size: 0.72rem;
+    color: var(--fc-text-muted);
+    margin: 0 0 0.45rem;
+}
+.span-count-bar {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    padding: 0.9rem 1rem;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 14px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(248, 250, 252, 0.96));
+}
+.span-count-copy {
+    display: grid;
+    gap: 0.2rem;
+}
+.span-count-copy strong {
+    font-size: 0.84rem;
+    color: var(--fc-gray-900);
+}
+.span-count-copy span {
+    font-size: 0.72rem;
+    color: var(--fc-text-muted);
+}
+.span-count-control {
+    min-width: 170px;
+}
+.span-hidden {
+    display: none !important;
+}
+@media (max-width: 1100px) {
+    .input-grid--three,
+    .input-grid--equal-three,
+    .input-grid--four,
+    .input-grid--five {
+        grid-template-columns: 1fr 1fr;
+    }
+    .continuous-span-row {
+        grid-template-columns: 92px 1fr 1fr;
+    }
+    .member-toolbar__top {
+        flex-direction: column;
+        align-items: start;
+    }
+}
+@media (max-width: 980px) {
+    .member-strip {
+        grid-template-columns: 1fr;
+    }
+    .member-strip__actions {
+        justify-content: stretch;
+        flex-wrap: wrap;
+    }
+    .input-grid--three,
+    .input-grid--equal-three,
+    .input-grid--two,
+    .input-grid--four,
+    .input-grid--five {
+        grid-template-columns: 1fr;
+    }
+    .continuous-span-row {
+        grid-template-columns: 1fr;
+    }
+    .span-count-bar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .span-count-control {
+        min-width: 0;
+    }
+    .member-type-btn {
+        width: 74px;
+        min-height: 68px;
+    }
+    .point-load-row {
+        grid-template-columns: 1fr;
+    }
+    .distributed-load-row {
+        grid-template-columns: 1fr;
+    }
+    .point-load-row__action,
+    .point-load-actions {
+        justify-content: stretch;
+    }
+    .load-template-bar {
+        grid-template-columns: 1fr;
+    }
+    .load-template-status {
+        grid-column: 1;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-container page-container--beam-designer">
+
+    <form method="post" id="designForm">
+    {% csrf_token %}
+    {% if source_design %}
+    <input type="hidden" name="{% if revision_mode %}revision_source_id{% else %}source_design_id{% endif %}" value="{{ source_design.pk }}">
+    <div class="fc-card" style="margin-bottom:1rem;border-color:rgba(45,125,210,.32);background:linear-gradient(135deg,rgba(239,246,255,.94),rgba(248,250,252,.96));">
+        <div class="fc-card-body" style="display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.8rem 1rem;">
+            <div>
+                <strong style="color:var(--fc-navy);font-size:.82rem;">
+                    {% if revision_mode %}Creating a new revision of{% else %}Working from{% endif %}
+                    &ldquo;{{ source_design.name|default:"Saved Design" }}&rdquo;
+                </strong>
+                <div style="font-size:.72rem;color:var(--fc-text-muted);margin-top:.15rem;">
+                    The original remains unchanged. Saving creates {% if revision_mode %}a linked revision{% else %}an independent design{% endif %}.
+                </div>
+            </div>
+            <a href="{% url 'beams:detail' source_design.pk %}" class="fc-btn fc-btn--ghost" style="white-space:nowrap;">
+                <i class="bi bi-arrow-left"></i> Original
+            </a>
+        </div>
+    </div>
+    {% endif %}
+        <div class="designer-shell">
+
+            <div class="designer-top">
+                {% if result %}
+                    {% include 'beams/_result_preview.html' with result=result support_type_sequence=support_type_sequence %}
+                {% else %}
+                <div class="fc-card">
+                    <div class="fc-card-header">
+                        <span class="fc-card-title"><i class="bi bi-diagram-2"></i> Member / Span Preview</span>
+                        <span id="livePreviewMeta" style="font-size:0.72rem;color:var(--fc-text-muted);">Geometry updates here as you change span count and supports</span>
+                    </div>
+                    <div class="fc-card-body">
+                        <div class="beam-diagram-wrap">
+                            <svg id="beamLivePreviewSvg" viewBox="0 0 600 170" height="170"></svg>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="fc-card designer-input-card">
+                <div class="fc-card-header">
+                    <span class="fc-card-title"><i class="bi bi-grid-3x3-gap"></i> Member</span>
+                    <span style="font-size:0.72rem;color:var(--fc-text-muted);">Choose the section first, then work through spans, loads, and settings</span>
+                </div>
+                <div class="fc-card-body designer-input-meta">
+                    <div class="member-toolbar">
+                        <div class="member-toolbar__top">
+                            <span class="member-toolbar__title">Object Toolbar</span>
+                            <span class="member-toolbar__copy">Pick the member object first, the way BC Calc starts with joist, beam, or rafter before you fill in the design tabs.</span>
+                        </div>
+                        <div class="member-type-buttons" id="memberTypeButtons">
+                            {% for val, label in form.member_type.field.choices %}
+                            <button type="button"
+                                    class="member-type-btn {% if form.member_type.value == val or forloop.first and not form.member_type.value %}member-type-btn--active{% endif %}"
+                                    data-member-type="{{ val }}"
+                                    data-tooltip="{{ label }}"
+                                    aria-label="{{ label }}"
+                                    onclick="selectMemberType(this, '{{ val }}')">
+                                <span class="member-type-btn__icon" aria-hidden="true">
+                                    {% if val == 'floor_joist' %}
+                                    <img src="{% static 'images/i-joist.svg' %}" alt="">
+                                    {% elif val == 'beam_header' %}
+                                    <img src="{% static 'images/beam.svg' %}" alt="">
+                                    {% elif val == 'ceiling_joist_no_storage' or val == 'ceiling_joist_limited_storage' %}
+                                    <i class="bi bi-grid-3x3-gap-fill"></i>
+                                    {% elif val == 'rafter_no_ceiling' or val == 'rafter_with_ceiling' %}
+                                    <img src="{% static 'images/rafter.svg' %}" alt="">
+                                    {% else %}
+                                    <i class="bi bi-layout-sidebar-inset"></i>
+                                    {% endif %}
+                                </span>
+                            </button>
+                            {% endfor %}
+                        </div>
+                        <select name="{{ form.member_type.html_name }}"
+                                id="{{ form.member_type.id_for_label }}"
+                                class="fc-select member-type-select-fallback {% if form.member_type.errors %}is-invalid{% endif %}">
+                            {% for val, label in form.member_type.field.choices %}
+                            <option value="{{ val }}" {% if form.member_type.value == val or forloop.first and not form.member_type.value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="fc-form-group">
+                        <label class="fc-label" for="{{ form.material.id_for_label }}">Material</label>
+                        <select name="{{ form.material.html_name }}"
+                                id="{{ form.material.id_for_label }}"
+                                class="fc-select {% if form.material.errors %}is-invalid{% endif %}">
+                            {% for val, label in form.material.field.choices %}
+                            <option value="{{ val }}" {% if form.material.value == val or val == 'spf_no2' and not form.material.value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                        <p style="font-size:0.72rem;color:var(--fc-text-muted);margin:.3rem 0 0;">Sawn dimension lumber. Southern Pine, LVL, and steel coming later.</p>
+                        {% for e in form.material.errors %}<p class="fc-field-error">{{ e }}</p>{% endfor %}
+                    </div>
+                    <div class="member-strip">
+                        <div class="member-strip__size">
+                            <label class="fc-label">Member size</label>
+                            <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:0.4rem;" id="sizeButtons">
+                                {% for val, label in form.nominal_size.field.choices %}
+                                <button type="button"
+                                        class="size-btn fc-btn fc-btn--secondary {% if form.nominal_size.value == val or forloop.first and not form.nominal_size.value %}size-btn--active{% endif %}"
+                                        data-size="{{ val }}"
+                                        ondblclick="runSingleAnalysis('{{ val }}')"
+                                        onclick="selectSize(this, '{{ val }}')">
+                                    {{ label }}
+                                </button>
+                                {% endfor %}
+                            </div>
+                            <input type="hidden" name="{{ form.nominal_size.html_name }}"
+                                   id="nominalSizeInput"
+                                   value="{{ form.nominal_size.value|default:'2x6' }}">
+                        </div>
+                        <div class="fc-check-group fc-form-group" style="margin-bottom:0;align-self:center;">
+                            <input type="checkbox" name="{{ form.repetitive.html_name }}"
+                                   id="{{ form.repetitive.id_for_label }}"
+                                   {% if form.repetitive.value %}checked{% endif %}>
+                            <label for="{{ form.repetitive.id_for_label }}">Repetitive member</label>
+                        </div>
+                        <div class="member-strip__actions">
+                            <button type="submit" name="action" value="run" class="fc-btn fc-btn--primary fc-btn--lg">
+                                <i class="bi bi-play-fill"></i> Run Analysis
+                            </button>
+                            <button type="button" class="fc-btn fc-btn--secondary fc-btn--lg" onclick="runAllSizes()">
+                                <i class="bi bi-list-check"></i> All Sizes
+                            </button>
+                            <button type="submit" name="action" value="save" class="fc-btn fc-btn--secondary" title="Save design">
+                                <i class="bi bi-floppy"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <p style="font-size:0.72rem;color:var(--fc-text-muted);margin:0;">
+                        Double-click any member size to run it immediately. This top strip stays aligned with the preview, closer to the BC Calc workflow.
+                    </p>
+                </div>
+            </div>
+
+            <!-- ===================== INPUT PANEL ===================== -->
+            <div class="fc-card designer-input-section">
+
+                    <!-- Tabs -->
+                    <div class="fc-tabs" role="tablist">
+                        <button type="button" class="fc-tab {% if active_tab == 'spans' %}active{% endif %}"
+                                data-tab="spans" role="tab">
+                            <i class="bi bi-arrows-expand"></i> Span
+                        </button>
+                        <button type="button" class="fc-tab {% if active_tab == 'loads' %}active{% endif %}"
+                                data-tab="loads" role="tab">
+                            <i class="bi bi-arrow-down"></i> Loads
+                        </button>
+                        <button type="button" class="fc-tab {% if active_tab == 'settings' %}active{% endif %}"
+                                data-tab="settings" role="tab">
+                            <i class="bi bi-sliders"></i> Settings
+                        </button>
+                    </div>
+
+                    <!-- Span Tab -->
+                    <div class="fc-tab-panel {% if active_tab == 'spans' %}active{% endif %}" id="tab-spans">
+
+                        <div class="span-count-bar">
+                            <div class="span-count-copy">
+                                <strong>Continuous Span Layout</strong>
+                                <span>Choose how many back spans the member has. Additional span, support, and bearing rows appear as needed.</span>
+                            </div>
+                            <div class="fc-form-group span-count-control" style="margin-bottom:0;">
+                                <label class="fc-label" for="spanCountSelect">Number of spans</label>
+                                <select id="spanCountSelect" class="fc-select">
+                                    {% for count in '12345678910'|make_list %}{% endfor %}
+                                    <option value="1">1 span</option>
+                                    <option value="2">2 spans</option>
+                                    <option value="3">3 spans</option>
+                                    <option value="4">4 spans</option>
+                                    <option value="5">5 spans</option>
+                                    <option value="6">6 spans</option>
+                                    <option value="7">7 spans</option>
+                                    <option value="8">8 spans</option>
+                                    <option value="9">9 spans</option>
+                                    <option value="10">10 spans</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-grid--four">
+                            <div class="fc-form-group">
+                                <label class="fc-label" for="{{ form.span_ft.id_for_label }}">Span 1 (ft)</label>
+                                <input type="number" step="0.1" min="0.1" name="{{ form.span_ft.html_name }}"
+                                       id="{{ form.span_ft.id_for_label }}"
+                                       value="{{ form.span_ft.value|default:'' }}"
+                                       class="fc-input {% if form.span_ft.errors %}is-invalid{% endif %}"
+                                       placeholder="e.g. 14">
+                                {% for e in form.span_ft.errors %}<p class="fc-field-error">{{ e }}</p>{% endfor %}
+                            </div>
+                            <div class="fc-form-group">
+                                <label class="fc-label" for="{{ form.span_mode.id_for_label }}">Span measured</label>
+                                <select name="{{ form.span_mode.html_name }}"
+                                        id="{{ form.span_mode.id_for_label }}"
+                                        class="fc-select {% if form.span_mode.errors %}is-invalid{% endif %}">
+                                    {% for val, label in form.span_mode.field.choices %}
+                                    <option value="{{ val }}" {% if form.span_mode.value == val %}selected{% endif %}>{{ label }}</option>
+                                        {% endfor %}
+                                </select>
+                            </div>
+                            <div class="fc-form-group" data-span-block="2">
+                                <label class="fc-label" for="{{ form.span_2_ft.id_for_label }}">Span 2 (ft, optional)</label>
+                                <input type="number" step="0.1" min="0.1" name="{{ form.span_2_ft.html_name }}"
+                                       id="{{ form.span_2_ft.id_for_label }}"
+                                       value="{{ form.span_2_ft.value|default:'' }}"
+                                       class="fc-input {% if form.span_2_ft.errors %}is-invalid{% endif %}"
+                                       placeholder="leave blank for single span">
+                                {% for e in form.span_2_ft.errors %}<p class="fc-field-error">{{ e }}</p>{% endfor %}
+                            </div>
+                            <div class="fc-form-group" data-span-block="3">
+                                <label class="fc-label" for="{{ form.span_3_ft.id_for_label }}">Span 3 (ft, optional)</label>
+                                <input type="number" step="0.1" min="0.1" name="{{ form.span_3_ft.html_name }}"
+                                       id="{{ form.span_3_ft.id_for_label }}"
+                                       value="{{ form.span_3_ft.value|default:'' }}"
+                                       class="fc-input {% if form.span_3_ft.errors %}is-invalid{% endif %}"
+                                       placeholder="leave blank unless using 3 spans">
+                                {% for e in form.span_3_ft.errors %}<p class="fc-field-error">{{ e }}</p>{% endfor %}
+                            </div>
+                        </div>
+                        <p style="font-size:0.72rem;color:var(--fc-text-muted);margin:0 0 1rem;">
+                            Structural analysis always runs on the clear (inside-to-inside) span. Out-to-out and
+                            center-to-center are converted to clear span using the bearing lengths below. Use the
+                            additional continuous-span rows to extend the member layout up to 10 spans total.
+                        </p>
+
+                        <div class="input-grid--two">
+                            <div class="fc-form-group">
+                                <label class="fc-label" for="{{ form.left_overhang_ft.id_for_label }}">Left cantilever / overhang (ft)</label>
+                                <input type="number" step="0.1" min="0" name="{{ form.left_overhang_ft.html_name }}"
+                                       id="{{ form.left_overhang_ft.id_for_label }}"
+                                       value="{{ form.left_overhang_ft.value|default:'' }}"
+                                       class="fc-input {% if form.left_overhang_ft.errors %}is-invalid{% endif %}"
+                                       placeholder="0">
+                                {% for e in form.left_overhang_ft.errors %}<p class="fc-field-error">{{ e }}</p>{% endfor %}
+                            </div>
+                            <div class="fc-form-group">
+                                <label class="fc-label" for="{{ form.right_overhang_ft.id_for_label }}">Right cantilever / overhang (ft)</label>
+                                <input type="number" step="0.1" min="0" name="{{ form.right_overhang_ft.html_name }}"
+                                       id="{{ form.right_overhang_ft.id_for_label }}"
+                                       value="{{ form.right_overhang_ft.value|default:'' }}"
+                                       class="fc-input {% if form.right_overhang_ft.errors %}is-invalid{% endif %}"
+                                       placeholder="0">
+                                {% for e in form.right_overhang_ft.errors %}<p class="fc-field-error">{{ e }}</p>{% endfor %}
+                            </div>
+                        </div>
+                        <p style="font-size:0.72rem;color:var(--fc-text-muted);margin:0 0 1rem;">
+                            Leave overhangs at 0 for a plain simply-supported member. Point load locations are measured
+                            from the left end of the member overall. End overhangs can now be combined with the
+                            current continuous-beam workflow, so the preview and checks follow the full member length.
+                        </p>
+
+                        <div class="input-grid--four">
+                            <div class="fc-form-group">
+                                <label class="fc-label" for="{{ form.support_type_left.id_for_label }}">Left support</label>
+                                <select name="{{ form.support_type_left.html_name }}"
+                                        id="{{ form.support_type_left.id_for_label }}"
+                                        class="fc-select {% if form.support_type_left.errors %}is-invalid{% endif %}">
+                                    {% for val, label in form.support_type_left.field.choices %}
+                                    <option value="{{ val }}" {% if form.support_type_left.value == val %}selected{% endif %}>{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="fc-form-group" data-support-block="2">
+                                <label class="fc-label" for="{{ form.support_type_mid.id_for_label }}">Interior support B2</label>
+                                <select name="{{ form.support_type_mid.html_name }}"
+                                        id="{{ form.support_type_mid.id_for_label }}"
+                                        class="fc-select {% if form.support_type_mid.errors %}is-invalid{% endif %}">
+                                    {% for val, label in form.support_type_mid.field.choices %}
+                                    <option value="{{ val }}" {% if form.support_type_mid.value == val %}selected{% endif %}>{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="fc-form-group" data-support-block="3">
+                                <label class="fc-label" for="{{ form.support_type_mid_2.id_for_label }}">Interior support B3</label>
+                                <select name="{{ form.support_type_mid_2.html_name }}"
+                                        id="{{ form.support_type_mid_2.id_for_label }}"
+                                        class="fc-select {% if form.support_type_mid_2.errors %}is-invalid{% endif %}">
+                                    {% for val, label in form.support_type_mid_2.field.choices %}
+                                    <option value="{{ val }}" {% if form.support_type_mid_2.value == val %}selected{% endif %}>{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="fc-form-group">
+                                <label class="fc-label" id="finalSupportLabel" for="{{ form.support_type_right.id_for_label }}">Right support B2 (final)</label>
+                                <select name="{{ form.support_type_right.html_name }}"
+                                        id="{{ form.support_type_right.id_for_label }}"
+                                        class="fc-select {% if form.support_type_right.errors %}is-invalid{% endif %}">
+                                    {% for val, label in form.support_type_right.field.choices %}
+                                    <option value="{{ val }}" {% if form.support_type_right.value == val %}selected{% endif %}>{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-grid--four">
+                            <div class="fc-form-group">
+                                <label class="fc-label" for="{{ form.bearing_length_left_in.id_for_label }}">Bearing length B1 (left, in)</label>
+                                <input type="number" step="0.25" min="0.5" name="{{ form.bearing_length_left_in.html_name }}"
+                                       id="{{ form.bearing_length_left_in.id_for_label }}"
+                                       value="{{ form.bearing_length_left_in.value|default:'1.5' }}"
+                                       class="fc-input {% if form.bearing_length_left_in.errors %}is-invalid{% endif %}">
+                                {% for e in form.bearing_length_left_in.errors %}<p class="fc-field-error">{{ e }}</p>{% endfor %}
+                            </div>
+                            <div class="fc-form-group" data-bearing-block="2">
+                                <label class="fc-label" for="{{ form.bearing_length_mid_in.id_for_label }}">Bearing length B2 (interior, in)</label>
+                                <input type="number" step="0.25" min="0.5" name="{{ form.bearing_length_mid_in.html_name }}"
+                                       id="{{ form.bearing_length_mid_in.id_for_label }}"
+                                       value="{{ form.bearing_length_mid_in.value|default:'3.5' }}"
+                                       class="fc-input {% if form.bearing_length_mid_in.errors %}is-invalid{% endif %}">
+                                {% for e in form.bearing_length_mid_in.errors %}<p class="fc-field-error">{{ e }}</p>{% endfor %}
+                            </div>
+                            <div class="fc-form-group" data-bearing-block="3">
+                                <label class="fc-label" for="{{ form.bearing_length_mid_2_in.id_for_label }}">Bearing length B3 (interior, in)</label>
+                                <input type="number" step="0.25" min="0.5" name="{{ form.bearing_length_mid_2_in.html_name }}"
+                                       id="{{ form.bearing_length_mid_2_in.id_for_label }}"
+                                       value="{{ form.bearing_length_mid_2_in.value|default:'3.5' }}"
+                                       class="fc-input {% if form.bearing_length_mid_2_in.errors %}is-invalid{% endif %}">
+                                {% for e in form.bearing_length_mid_2_in.errors %}<p class="fc-field-error">{{ e }}</p>{% endfor %}
+                            </div>
+                            <div class="fc-form-group">
+                                <label class="fc-label" id="finalBearingLabel" for="{{ form.bearing_length_right_in.id_for_label }}">Bearing length B2 (final, in)</label>
+                                <input type="number" step="0.25" min="0.5" name="{{ form.bearing_length_right_in.html_name }}"
+                                       id="{{ form.bearing_length_right_in.id_for_label }}"
+                                       value="{{ form.bearing_length_right_in.value|default:'1.5' }}"
+                                       class="fc-input {% if form.bearing_length_right_in.errors %}is-invalid{% endif %}">
+                                {% for e in form.bearing_length_right_in.errors %}<p class="fc-field-error">{{ e }}</p>{% endfor %}
+                            </div>
+                        </div>
+                        <div class="fc-card continuous-span-card">
+                            <div class="fc-card-header">
+                                <span class="fc-card-title"><i class="bi bi-node-plus"></i> Additional Continuous Spans</span>
+                                <span style="font-size:0.72rem;color:var(--fc-text-muted);">Use these rows for Span 4 through Span 10</span>
+                            </div>
+                            <div class="fc-card-body continuous-span-stack">
+                                <p class="continuous-span-note">
+                                    Fill rows in order. Each row adds one span and the interior support at its left end, so the final support stays in the fixed row above.
+                                </p>
+                                {% for row in extra_span_rows %}
+                                <div class="continuous-span-row {% if row.errors %}continuous-span-row--error{% endif %}" data-span-block="{{ forloop.counter|add:3 }}" data-support-block="{{ forloop.counter|add:3 }}" data-bearing-block="{{ forloop.counter|add:3 }}">
+                                    <div>
+                                        <div class="continuous-span-chip {% if row.errors %}continuous-span-chip--error{% endif %}">
+                                            {{ row.support_label }}
+                                        </div>
+                                        <p class="continuous-span-label" style="margin-top:0.55rem;">adds {{ row.span_label }}</p>
+                                    </div>
+                                    <div class="fc-form-group">
+                                        <label class="fc-label">{{ row.span_label }} (ft, optional)</label>
+                                        <input type="number" step="0.1" min="0.1" name="extra_span_ft"
+                                               value="{{ row.span_ft }}"
+                                               class="fc-input {% if row.errors.span_ft %}is-invalid{% endif %}"
+                                               placeholder="leave blank if unused">
+                                        {% if row.errors.span_ft %}<p class="fc-field-error">{{ row.errors.span_ft }}</p>{% endif %}
+                                    </div>
+                                    <div class="fc-form-group">
+                                        <label class="fc-label">Interior support {{ row.support_label }}</label>
+                                        <select name="extra_support_type" class="fc-select">
+                                            {% for val, label in form.support_type_mid.field.choices %}
+                                            <option value="{{ val }}" {% if row.support_type == val %}selected{% endif %}>{{ label }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <div class="fc-form-group">
+                                        <label class="fc-label">Bearing length {{ row.support_label }} (in)</label>
+                                        <input type="number" step="0.25" min="0.5" name="extra_bearing_length_in"
+                                               value="{{ row.bearing_length_in }}"
+                                               class="fc-input {% if row.errors.bearing_length_in %}is-invalid{% endif %}">
+                                        {% if row.errors.bearing_length_in %}<p class="fc-field-error">{{ row.errors.bearing_length_in }}</p>{% endif %}
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Loads Tab -->
+                    <div class="fc-tab-panel {% if active_tab == 'loads' %}active{% endif %}" id="tab-loads">
+
+                        {% if form.non_field_errors %}
+                        <div class="non-field-error">
+                            {% for e in form.non_field_errors %}{{ e }}{% endfor %}
+                        </div>
+                        {% endif %}
+
+                        <div class="load-template-bar">
+                            <div>
+                                <label class="fc-label" for="loadTemplateSelect">Saved load template</label>
+                                <select id="loadTemplateSelect" class="fc-select">
+                                    <option value="">Choose a template</option>
+                                    {% for template in load_templates %}
+                                    <option value="{{ template.id }}">{{ template.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="load-action-buttons">
+                                <button type="button" class="fc-btn fc-btn--ghost" onclick="applySelectedLoadTemplate()">
+                                    <i class="bi bi-arrow-down-square"></i> Apply
+                                </button>
+                                <button type="button" class="fc-btn fc-btn--ghost" onclick="deleteSelectedLoadTemplate()" title="Delete selected template">
+                                    <i class="bi bi-trash3"></i>
+                                </button>
+                            </div>
+                            <div>
+                                <label class="fc-label" for="loadTemplateName">Template name</label>
+                                <input type="text" id="loadTemplateName" name="load_template_name" maxlength="80" class="fc-input" placeholder="e.g. Typical floor loading">
+                            </div>
+                            <button type="button" class="fc-btn fc-btn--secondary" onclick="saveLoadTemplate()">
+                                <i class="bi bi-bookmark-plus"></i> Save Template
+                            </button>
+                            <p class="load-template-status" id="loadTemplateStatus" aria-live="polite"></p>
+                        </div>
+
+                        <p style="font-size:0.75rem;color:var(--fc-text-muted);margin:0 0 1rem;">
+                            Enter uniform loads as either area loads (psf) or line loads (plf). When psf is selected,
+                            analysis converts each component to plf using the on-center spacing.
+                        </p>
+
+                        <div class="input-grid--two" style="margin-bottom:1rem;">
+                            <div class="fc-form-group" style="margin-bottom:0;">
+                                <label class="fc-label" for="{{ form.uniform_load_basis.id_for_label }}">Uniform load basis</label>
+                                <select name="{{ form.uniform_load_basis.html_name }}"
+                                        id="{{ form.uniform_load_basis.id_for_label }}"
+                                        class="fc-select {% if form.uniform_load_basis.errors %}is-invalid{% endif %}">
+                                    {% for val, label in form.uniform_load_basis.field.choices %}
+                                    <option value="{{ val }}" {% if form.uniform_load_basis.value == val %}selected{% endif %}>{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                                {% for e in form.uniform_load_basis.errors %}<p class="fc-field-error">{{ e }}</p>{% endfor %}
+                            </div>
+                            <div class="fc-form-group" style="margin-bottom:0;">
+                                <label class="fc-label" for="{{ form.spacing_in.id_for_label }}">On-center spacing (in)</label>
+                                <input type="number" step="0.5" min="1" name="{{ form.spacing_in.html_name }}"
+                                       id="{{ form.spacing_in.id_for_label }}"
+                                       value="{{ form.spacing_in.value|default:form.spacing_in.field.initial }}"
+                                       class="fc-input {% if form.spacing_in.errors %}is-invalid{% endif %}">
+                                {% for e in form.spacing_in.errors %}<p class="fc-field-error">{{ e }}</p>{% endfor %}
+                            </div>
+                        </div>
+
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:0.75rem;margin-bottom:0.75rem;">
+                            <p style="font-size:0.72rem;color:var(--fc-text-muted);margin:0;">
+                                Strength checks use BC Calc-style duration factors by load type: D 0.9, L 1.0, S 1.15, Lr 1.25, W 1.6.
+                            </p>
+                            <button type="button" class="fc-btn fc-btn--ghost" style="padding:0.35rem 0.6rem;" onclick="applyLoadDefaults()">
+                                Apply Recommended Loads
+                            </button>
+                        </div>
+
+                        <div class="input-grid--five">
+                            <div class="fc-form-group" style="margin-bottom:0;">
+                                <label class="fc-label" data-load-label="dead">Dead</label>
+                                <input type="number" step="1" min="0" name="{{ form.dead_load_plf.html_name }}"
+                                       value="{{ form.dead_load_plf.value|default:'' }}"
+                                       class="fc-input {% if form.dead_load_plf.errors %}is-invalid{% endif %}"
+                                       placeholder="0">
+                            </div>
+                            <div class="fc-form-group" style="margin-bottom:0;">
+                                <label class="fc-label" data-load-label="live">Live</label>
+                                <input type="number" step="1" min="0" name="{{ form.live_load_plf.html_name }}"
+                                       value="{{ form.live_load_plf.value|default:'' }}"
+                                       class="fc-input {% if form.live_load_plf.errors %}is-invalid{% endif %}"
+                                       placeholder="0">
+                            </div>
+                            <div class="fc-form-group" style="margin-bottom:0;">
+                                <label class="fc-label" data-load-label="snow">Snow</label>
+                                <input type="number" step="1" min="0" name="{{ form.snow_load_plf.html_name }}"
+                                       value="{{ form.snow_load_plf.value|default:'' }}"
+                                       class="fc-input {% if form.snow_load_plf.errors %}is-invalid{% endif %}"
+                                       placeholder="0">
+                            </div>
+                            <div class="fc-form-group" style="margin-bottom:0;">
+                                <label class="fc-label" data-load-label="roof_live">Roof live</label>
+                                <input type="number" step="1" min="0" name="{{ form.roof_live_load_plf.html_name }}"
+                                       value="{{ form.roof_live_load_plf.value|default:'' }}"
+                                       class="fc-input {% if form.roof_live_load_plf.errors %}is-invalid{% endif %}"
+                                       placeholder="0">
+                            </div>
+                            <div class="fc-form-group" style="margin-bottom:0;">
+                                <label class="fc-label" data-load-label="wind">Wind</label>
+                                <input type="number" step="1" min="0" name="{{ form.wind_load_plf.html_name }}"
+                                       value="{{ form.wind_load_plf.value|default:'' }}"
+                                       class="fc-input {% if form.wind_load_plf.errors %}is-invalid{% endif %}"
+                                       placeholder="0">
+                            </div>
+                        </div>
+
+                        <hr class="fc-divider">
+
+                        <div style="display:flex;align-items:end;justify-content:space-between;gap:0.75rem;margin-bottom:0.625rem;">
+                            <div>
+                                <p style="font-size:0.75rem;font-weight:600;color:var(--fc-gray-600);margin:0;text-transform:uppercase;letter-spacing:.06em;">Additive Distributed Zones</p>
+                                <p style="font-size:0.7rem;color:var(--fc-text-muted);margin:0.2rem 0 0;">Applies an additional load only between the entered locations, measured from the left end.</p>
+                            </div>
+                        </div>
+
+                        <div id="distributedLoadRows" class="distributed-load-rows">
+                            {% for load_form in distributed_load_formset %}
+                            <div class="distributed-load-row {% if not forloop.first and not load_form.w.value and not load_form.start_ft.value and not load_form.end_ft.value and not load_form.non_field_errors and not load_form.w.errors and not load_form.start_ft.errors and not load_form.end_ft.errors %}is-hidden{% endif %}"
+                                 data-distributed-load-row>
+                                <div>
+                                    {% if forloop.first %}<label class="fc-label" data-zone-load-label>Intensity</label>{% endif %}
+                                    <input type="number" step="0.1" min="0" name="{{ load_form.w.html_name }}"
+                                           value="{{ load_form.w.value|default:'' }}"
+                                           class="fc-input {% if load_form.w.errors %}is-invalid{% endif %}"
+                                           placeholder="load">
+                                </div>
+                                <div>
+                                    {% if forloop.first %}<label class="fc-label">Start (ft)</label>{% endif %}
+                                    <input type="number" step="0.1" min="0" name="{{ load_form.start_ft.html_name }}"
+                                           value="{{ load_form.start_ft.value|default:'' }}"
+                                           class="fc-input {% if load_form.start_ft.errors %}is-invalid{% endif %}"
+                                           placeholder="from left">
+                                </div>
+                                <div>
+                                    {% if forloop.first %}<label class="fc-label">End (ft)</label>{% endif %}
+                                    <input type="number" step="0.1" min="0" name="{{ load_form.end_ft.html_name }}"
+                                           value="{{ load_form.end_ft.value|default:'' }}"
+                                           class="fc-input {% if load_form.end_ft.errors %}is-invalid{% endif %}"
+                                           placeholder="from left">
+                                </div>
+                                <div>
+                                    {% if forloop.first %}<label class="fc-label">Type</label>{% endif %}
+                                    <select name="{{ load_form.load_type.html_name }}" class="fc-select">
+                                        {% for val, label in load_form.load_type.field.choices %}
+                                        <option value="{{ val }}" {% if load_form.load_type.value == val %}selected{% endif %}>{{ label }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="point-load-row__action" {% if forloop.first %}style="padding-top:1.35rem"{% endif %}>
+                                    <button type="button" class="fc-btn fc-btn--ghost" style="padding:0.4rem 0.5rem;" onclick="duplicateDistributedLoadRow(this)" title="Duplicate distributed load" data-copy-distributed-load>
+                                        <i class="bi bi-copy"></i>
+                                    </button>
+                                    <button type="button" class="fc-btn fc-btn--ghost" style="padding:0.4rem 0.5rem;" onclick="clearDistributedLoadRow(this)" title="Clear distributed load">
+                                        <i class="bi bi-x"></i>
+                                    </button>
+                                </div>
+                                {% for e in load_form.non_field_errors %}
+                                <p class="fc-field-error" style="grid-column:1/-1;margin:0;">{{ e }}</p>
+                                {% endfor %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                        <div class="point-load-actions">
+                            <div class="load-action-buttons">
+                                <button type="button" class="fc-btn fc-btn--ghost" id="addDistributedLoadBtn" onclick="addDistributedLoadRow()">
+                                    <i class="bi bi-plus-lg"></i> Add distributed zone
+                                </button>
+                                <button type="button" class="fc-btn fc-btn--ghost" onclick="clearAllDistributedLoadRows()">
+                                    <i class="bi bi-trash3"></i> Clear all
+                                </button>
+                            </div>
+                            <span class="point-load-counter" id="distributedLoadCounter">1 distributed-load row visible</span>
+                        </div>
+                        {{ distributed_load_formset.management_form }}
+
+                        <hr class="fc-divider">
+
+                        <p style="font-size:0.75rem;font-weight:600;color:var(--fc-gray-600);margin-bottom:0.625rem;text-transform:uppercase;letter-spacing:.06em;">Point Loads</p>
+
+                        <div id="pointLoadRows" class="point-load-rows">
+                            {% for pl_form in point_load_formset %}
+                            <div class="point-load-row {% if not forloop.first and not pl_form.p.value and not pl_form.location_ft.value and not pl_form.non_field_errors and not pl_form.p.errors and not pl_form.location_ft.errors %}is-hidden{% endif %}"
+                                 data-point-load-row
+                                 data-row-index="{{ forloop.counter0 }}">
+                                <div>
+                                    {% if forloop.first %}<label class="fc-label">Load (lb)</label>{% endif %}
+                                    <input type="number" step="1" min="0" name="{{ pl_form.p.html_name }}"
+                                           value="{{ pl_form.p.value|default:'' }}"
+                                           class="fc-input {% if pl_form.p.errors %}is-invalid{% endif %}"
+                                           placeholder="lb">
+                                </div>
+                                <div>
+                                    {% if forloop.first %}<label class="fc-label">Location (ft)</label>{% endif %}
+                                    <input type="number" step="0.1" min="0" name="{{ pl_form.location_ft.html_name }}"
+                                           value="{{ pl_form.location_ft.value|default:'' }}"
+                                           class="fc-input {% if pl_form.location_ft.errors %}is-invalid{% endif %}"
+                                           placeholder="ft from left">
+                                </div>
+                                <div>
+                                    {% if forloop.first %}<label class="fc-label">Type</label>{% endif %}
+                                    <select name="{{ pl_form.load_type.html_name }}" class="fc-select">
+                                        {% for val, label in pl_form.load_type.field.choices %}
+                                        <option value="{{ val }}" {% if pl_form.load_type.value == val %}selected{% endif %}>{{ label }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="point-load-row__action" {% if forloop.first %}style="padding-top:1.35rem"{% endif %}>
+                                    <button type="button" class="fc-btn fc-btn--ghost" style="padding:0.4rem 0.5rem;" onclick="duplicatePointLoadRow(this)" title="Duplicate point load" data-copy-point-load>
+                                        <i class="bi bi-copy"></i>
+                                    </button>
+                                    <button type="button" class="fc-btn fc-btn--ghost" style="padding:0.4rem 0.5rem;" onclick="clearPointLoadRow(this)" title="Clear point load">
+                                        <i class="bi bi-x"></i>
+                                    </button>
+                                </div>
+                                {% for e in pl_form.non_field_errors %}
+                                <p class="fc-field-error" style="grid-column:1/-1;margin:0;">{{ e }}</p>
+                                {% endfor %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                        <div class="point-load-actions">
+                            <div class="load-action-buttons">
+                                <button type="button" class="fc-btn fc-btn--ghost" id="addPointLoadBtn" onclick="addPointLoadRow()">
+                                    <i class="bi bi-plus-lg"></i> Add point load
+                                </button>
+                                <button type="button" class="fc-btn fc-btn--ghost" onclick="clearAllPointLoadRows()">
+                                    <i class="bi bi-trash3"></i> Clear all
+                                </button>
+                            </div>
+                            <span class="point-load-counter" id="pointLoadCounter">1 point-load row visible</span>
+                        </div>
+                        {{ point_load_formset.management_form }}
+                        {{ load_templates|json_script:"beam-load-template-data" }}
+                    </div>
+
+                    <!-- Settings Tab -->
+                    <div class="fc-tab-panel {% if active_tab == 'settings' %}active{% endif %}" id="tab-settings">
+
+                        <p style="font-size:0.72rem;color:var(--fc-text-muted);margin:.3rem 0 1rem;">Changing member type, performance target, or subfloor profile can reset the recommended serviceability criteria for the member.</p>
+
+                        <div class="input-grid--two" style="margin-bottom:0.75rem;">
+                            <div class="fc-form-group">
+                                <label class="fc-label" for="{{ form.performance_profile.id_for_label }}">Performance target</label>
+                                <select name="{{ form.performance_profile.html_name }}"
+                                        id="{{ form.performance_profile.id_for_label }}"
+                                        class="fc-select {% if form.performance_profile.errors %}is-invalid{% endif %}">
+                                    {% for val, label in form.performance_profile.field.choices %}
+                                    <option value="{{ val }}" {% if form.performance_profile.value == val %}selected{% endif %}>{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                                {% for e in form.performance_profile.errors %}<p class="fc-field-error">{{ e }}</p>{% endfor %}
+                            </div>
+                            <div class="fc-form-group">
+                                <label class="fc-label" for="{{ form.subfloor_profile.id_for_label }}">Subfloor / floor feel target</label>
+                                <select name="{{ form.subfloor_profile.html_name }}"
+                                        id="{{ form.subfloor_profile.id_for_label }}"
+                                        class="fc-select {% if form.subfloor_profile.errors %}is-invalid{% endif %}">
+                                    {% for val, label in form.subfloor_profile.field.choices %}
+                                    <option value="{{ val }}" {% if form.subfloor_profile.value == val %}selected{% endif %}>{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                                {% for e in form.subfloor_profile.errors %}<p class="fc-field-error">{{ e }}</p>{% endfor %}
+                            </div>
+                        </div>
+                        <p id="subfloorProfileNote" style="font-size:0.72rem;color:var(--fc-text-muted);margin:0 0 1rem;">
+                            Subfloor selection only adjusts recommended floor-joist deflection targets. It does not assume composite action or change member strength.
+                        </p>
+
+                        <div class="fc-form-group" style="margin-bottom:.5rem;">
+                            <div style="display:flex;align-items:center;justify-content:space-between;gap:0.75rem;">
+                                <label class="fc-label" style="margin:0;">Deflection criteria</label>
+                                <button type="button" class="fc-btn fc-btn--ghost" style="padding:0.35rem 0.6rem;" onclick="resetDeflectionDefaults()">
+                                    Reset recommended criteria
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="input-grid--two" style="margin-bottom:0.75rem;">
+                            <div class="fc-form-group">
+                                <label class="fc-label" for="{{ form.deflection_limit_live.id_for_label }}">Back-span live/snow limit</label>
+                                <div style="display:flex;align-items:center;gap:.4rem;">
+                                    <span style="font-family:'JetBrains Mono', monospace;color:var(--fc-text-muted);">L/</span>
+                                    <input type="number" step="1" min="60" name="{{ form.deflection_limit_live.html_name }}"
+                                           id="{{ form.deflection_limit_live.id_for_label }}"
+                                           value="{{ form.deflection_limit_live.value|default:form.deflection_limit_live.field.initial }}"
+                                           class="fc-input {% if form.deflection_limit_live.errors %}is-invalid{% endif %}">
+                                </div>
+                                {% for e in form.deflection_limit_live.errors %}<p class="fc-field-error">{{ e }}</p>{% endfor %}
+                            </div>
+                            <div class="fc-form-group">
+                                <label class="fc-label" for="{{ form.deflection_limit_total.id_for_label }}">Back-span total-load limit</label>
+                                <div style="display:flex;align-items:center;gap:.4rem;">
+                                    <span style="font-family:'JetBrains Mono', monospace;color:var(--fc-text-muted);">L/</span>
+                                    <input type="number" step="1" min="60" name="{{ form.deflection_limit_total.html_name }}"
+                                           id="{{ form.deflection_limit_total.id_for_label }}"
+                                           value="{{ form.deflection_limit_total.value|default:form.deflection_limit_total.field.initial }}"
+                                           class="fc-input {% if form.deflection_limit_total.errors %}is-invalid{% endif %}">
+                                </div>
+                                {% for e in form.deflection_limit_total.errors %}<p class="fc-field-error">{{ e }}</p>{% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="input-grid--two">
+                            <div class="fc-form-group">
+                                <label class="fc-label" for="{{ form.cantilever_deflection_limit_live.id_for_label }}">Cantilever live/snow limit</label>
+                                <div style="display:flex;align-items:center;gap:.4rem;">
+                                    <span style="font-family:'JetBrains Mono', monospace;color:var(--fc-text-muted);">L/</span>
+                                    <input type="number" step="1" min="60" name="{{ form.cantilever_deflection_limit_live.html_name }}"
+                                           id="{{ form.cantilever_deflection_limit_live.id_for_label }}"
+                                           value="{{ form.cantilever_deflection_limit_live.value|default:form.cantilever_deflection_limit_live.field.initial }}"
+                                           class="fc-input {% if form.cantilever_deflection_limit_live.errors %}is-invalid{% endif %}">
+                                </div>
+                                {% for e in form.cantilever_deflection_limit_live.errors %}<p class="fc-field-error">{{ e }}</p>{% endfor %}
+                            </div>
+                            <div class="fc-form-group">
+                                <label class="fc-label" for="{{ form.cantilever_deflection_limit_total.id_for_label }}">Cantilever total-load limit</label>
+                                <div style="display:flex;align-items:center;gap:.4rem;">
+                                    <span style="font-family:'JetBrains Mono', monospace;color:var(--fc-text-muted);">L/</span>
+                                    <input type="number" step="1" min="60" name="{{ form.cantilever_deflection_limit_total.html_name }}"
+                                           id="{{ form.cantilever_deflection_limit_total.id_for_label }}"
+                                           value="{{ form.cantilever_deflection_limit_total.value|default:form.cantilever_deflection_limit_total.field.initial }}"
+                                           class="fc-input {% if form.cantilever_deflection_limit_total.errors %}is-invalid{% endif %}">
+                                </div>
+                                {% for e in form.cantilever_deflection_limit_total.errors %}<p class="fc-field-error">{{ e }}</p>{% endfor %}
+                            </div>
+                        </div>
+                        <p style="font-size:0.72rem;color:var(--fc-text-muted);margin:0 0 1rem;">
+                            BC Calc treats deflection criteria as a settings choice. Back-span and cantilever limits are independent here; cantilever checks use the common L = 2a convention for the effective tip-check span.
+                        </p>
+                        <hr class="fc-divider">
+
+                        <div class="fc-form-group">
+                            <label class="fc-label" for="{{ form.name.id_for_label }}">Design name (for saving)</label>
+                            <input type="text" name="{{ form.name.html_name }}"
+                                   id="{{ form.name.id_for_label }}"
+                                   value="{{ form.name.value|default:'' }}"
+                                   class="fc-input"
+                                   placeholder="e.g. Ridge beam, Garage header">
+                        </div>
+                        {% if revision_mode %}
+                        <div class="fc-form-group">
+                            <label class="fc-label" for="{{ form.revision_note.id_for_label }}">Revision note</label>
+                            <input type="text" name="{{ form.revision_note.html_name }}"
+                                   id="{{ form.revision_note.id_for_label }}"
+                                   value="{{ form.revision_note.value|default:'' }}"
+                                   class="fc-input"
+                                   placeholder="What changed in this revision?">
+                            {% for e in form.revision_note.errors %}<p class="fc-field-error">{{ e }}</p>{% endfor %}
+                        </div>
+                        {% endif %}
+                        <div class="input-grid--two" style="margin-top:0.75rem;">
+                            <div class="fc-form-group">
+                                <label class="fc-label" for="{{ form.project.id_for_label }}">Existing project</label>
+                                <select name="{{ form.project.html_name }}"
+                                        id="{{ form.project.id_for_label }}"
+                                        class="fc-select {% if form.project.errors %}is-invalid{% endif %}">
+                                    <option value="">No project</option>
+                                    {% for option in form.project.field.queryset %}
+                                    <option value="{{ option.pk }}" {% if form.project.value|stringformat:'s' == option.pk|stringformat:'s' %}selected{% endif %}>
+                                        {{ option.name }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                                {% for e in form.project.errors %}<p class="fc-field-error">{{ e }}</p>{% endfor %}
+                            </div>
+                            <div class="fc-form-group">
+                                <label class="fc-label" for="{{ form.new_project_name.id_for_label }}">Or create project while saving</label>
+                                <input type="text" name="{{ form.new_project_name.html_name }}"
+                                       id="{{ form.new_project_name.id_for_label }}"
+                                       value="{{ form.new_project_name.value|default:'' }}"
+                                       class="fc-input {% if form.new_project_name.errors %}is-invalid{% endif %}"
+                                       placeholder="e.g. Smith Residence">
+                                {% for e in form.new_project_name.errors %}<p class="fc-field-error">{{ e }}</p>{% endfor %}
+                            </div>
+                        </div>
+                        <p style="font-size:0.72rem;color:var(--fc-text-muted);margin:0.15rem 0 0;">
+                            When both are filled, the new project name wins and is reused later from the project list.
+                        </p>
+                    </div>
+
+                <!-- Disclaimer -->
+                <div style="padding: 1rem 1.25rem; border-top: 1px solid var(--fc-border);">
+                    <p style="font-size:0.7rem;color:var(--fc-text-muted);text-align:center;margin:0;line-height:1.5;">
+                        <i class="bi bi-info-circle"></i>
+                        Preliminary sizing only. Not a substitute for licensed engineering review.
+                    </p>
+                </div>
+            </div>
+
+            <div id="resultsArea">
+                {% if result %}
+                    {% include 'beams/_result_details.html' with result=result %}
+                {% endif %}
+            </div>
+
+        </div>
+    </form>
+
+    <!-- Hidden form for all-sizes AJAX scan -->
+    <input type="hidden" id="scanSizeTarget" value="">
+
+</div><!-- /page-container -->
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// ---- Tab switching ----
+const DEFLECTION_DEFAULTS = {
+    floor_joist: { live: 360, total: 240 },
+    ceiling_joist_no_storage: { live: 240, total: 240 },
+    ceiling_joist_limited_storage: { live: 360, total: 240 },
+    rafter_no_ceiling: { live: 180, total: 240 },
+    rafter_with_ceiling: { live: 240, total: 240 },
+    beam_header: { live: 360, total: 240 }
+};
+const PERFORMANCE_PROFILE_LIMITS = {
+    code_minimum: { live: null, total: null, cantileverLive: null, cantileverTotal: null },
+    enhanced_comfort: { live: 480, total: 360, cantileverLive: 360, cantileverTotal: 240 },
+    premium_finish: { live: 600, total: 480, cantileverLive: 480, cantileverTotal: 360 }
+};
+const SUBFLOOR_PROFILE_LIMITS = {
+    none: { live: null, total: null, cantileverLive: null, cantileverTotal: null },
+    panel: { live: 480, total: 360, cantileverLive: null, cantileverTotal: null },
+    glued_screwed: { live: 600, total: 480, cantileverLive: null, cantileverTotal: null }
+};
+const LOAD_DEFAULTS_PSF = {
+    floor_joist: { dead: 10, live: 40, snow: 0, roof_live: 0, wind: 0 },
+    ceiling_joist_no_storage: { dead: 5, live: 10, snow: 0, roof_live: 0, wind: 0 },
+    ceiling_joist_limited_storage: { dead: 10, live: 20, snow: 0, roof_live: 0, wind: 0 },
+    rafter_no_ceiling: { dead: 10, live: 0, snow: 0, roof_live: 20, wind: 0 },
+    rafter_with_ceiling: { dead: 15, live: 0, snow: 0, roof_live: 20, wind: 0 },
+    beam_header: { dead: 10, live: 40, snow: 0, roof_live: 0, wind: 0 }
+};
+
+document.querySelectorAll('.fc-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        const target = tab.dataset.tab;
+        document.querySelectorAll('.fc-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.fc-tab-panel').forEach(p => p.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById('tab-' + target).classList.add('active');
+    });
+});
+
+function applyDeflectionDefaults(memberType) {
+    const performanceProfile = document.getElementById('{{ form.performance_profile.id_for_label }}').value;
+    const subfloorProfile = document.getElementById('{{ form.subfloor_profile.id_for_label }}').value;
+    const defaults = getRecommendedDeflection(memberType, performanceProfile, subfloorProfile);
+    if (!defaults) return;
+    document.getElementById('{{ form.deflection_limit_live.id_for_label }}').value = defaults.live;
+    document.getElementById('{{ form.deflection_limit_total.id_for_label }}').value = defaults.total;
+    document.getElementById('{{ form.cantilever_deflection_limit_live.id_for_label }}').value = defaults.cantileverLive;
+    document.getElementById('{{ form.cantilever_deflection_limit_total.id_for_label }}').value = defaults.cantileverTotal;
+}
+
+function getRecommendedDeflection(memberType, performanceProfile, subfloorProfile) {
+    const base = DEFLECTION_DEFAULTS[memberType];
+    if (!base) return null;
+    const defaults = {
+        live: base.live,
+        total: base.total,
+        cantileverLive: base.live,
+        cantileverTotal: base.total
+    };
+    const profile = PERFORMANCE_PROFILE_LIMITS[performanceProfile] || PERFORMANCE_PROFILE_LIMITS.code_minimum;
+    if (profile.live) defaults.live = Math.max(defaults.live, profile.live);
+    if (profile.total) defaults.total = Math.max(defaults.total, profile.total);
+    if (profile.cantileverLive) defaults.cantileverLive = Math.max(defaults.cantileverLive, profile.cantileverLive);
+    if (profile.cantileverTotal) defaults.cantileverTotal = Math.max(defaults.cantileverTotal, profile.cantileverTotal);
+
+    if (memberType === 'floor_joist') {
+        const subfloor = SUBFLOOR_PROFILE_LIMITS[subfloorProfile] || SUBFLOOR_PROFILE_LIMITS.none;
+        if (subfloor.live) defaults.live = Math.max(defaults.live, subfloor.live);
+        if (subfloor.total) defaults.total = Math.max(defaults.total, subfloor.total);
+        if (subfloor.cantileverLive) defaults.cantileverLive = Math.max(defaults.cantileverLive, subfloor.cantileverLive);
+        if (subfloor.cantileverTotal) defaults.cantileverTotal = Math.max(defaults.cantileverTotal, subfloor.cantileverTotal);
+    }
+    return defaults;
+}
+
+function resetDeflectionDefaults() {
+    applyDeflectionDefaults(document.getElementById('{{ form.member_type.id_for_label }}').value);
+}
+
+document.getElementById('{{ form.member_type.id_for_label }}').addEventListener('change', event => {
+    document.querySelectorAll('.member-type-btn').forEach(button => {
+        button.classList.toggle('member-type-btn--active', button.dataset.memberType === event.target.value);
+    });
+    updateSubfloorSettingState();
+    applyDeflectionDefaults(event.target.value);
+    applyLoadDefaults();
+});
+
+document.getElementById('{{ form.performance_profile.id_for_label }}').addEventListener('change', () => {
+    applyDeflectionDefaults(document.getElementById('{{ form.member_type.id_for_label }}').value);
+});
+
+document.getElementById('{{ form.subfloor_profile.id_for_label }}').addEventListener('change', () => {
+    applyDeflectionDefaults(document.getElementById('{{ form.member_type.id_for_label }}').value);
+});
+
+function updateSubfloorSettingState() {
+    const memberType = document.getElementById('{{ form.member_type.id_for_label }}').value;
+    const subfloorSelect = document.getElementById('{{ form.subfloor_profile.id_for_label }}');
+    const note = document.getElementById('subfloorProfileNote');
+    const floorMode = memberType === 'floor_joist';
+    if (!floorMode) {
+        subfloorSelect.value = 'none';
+        note.textContent = 'Subfloor tuning only applies to floor joists. Other member types stay on the selected performance target alone.';
+    } else {
+        note.textContent = 'Subfloor selection only adjusts recommended floor-joist deflection targets. It does not assume composite action or change member strength.';
+    }
+}
+
+function updateLoadLabels() {
+    const basis = document.getElementById('{{ form.uniform_load_basis.id_for_label }}').value;
+    const unit = basis === 'psf' ? 'psf' : 'plf';
+    const labels = {
+        dead: 'Dead',
+        live: 'Live',
+        snow: 'Snow',
+        roof_live: 'Roof live',
+        wind: 'Wind'
+    };
+    document.querySelectorAll('[data-load-label]').forEach(label => {
+        label.textContent = `${labels[label.dataset.loadLabel]} (${unit})`;
+    });
+    document.getElementById('{{ form.spacing_in.id_for_label }}').disabled = basis !== 'psf';
+}
+
+function applyLoadDefaults() {
+    const memberType = document.getElementById('{{ form.member_type.id_for_label }}').value;
+    const basis = document.getElementById('{{ form.uniform_load_basis.id_for_label }}').value;
+    const spacing = parseFloat(document.getElementById('{{ form.spacing_in.id_for_label }}').value || '16');
+    const defaults = LOAD_DEFAULTS_PSF[memberType];
+    if (!defaults) return;
+    const factor = basis === 'psf' ? 1 : spacing / 12;
+    document.querySelector('input[name="{{ form.dead_load_plf.html_name }}"]').value = (defaults.dead * factor).toFixed(2).replace(/\.00$/, '');
+    document.querySelector('input[name="{{ form.live_load_plf.html_name }}"]').value = (defaults.live * factor).toFixed(2).replace(/\.00$/, '');
+    document.querySelector('input[name="{{ form.snow_load_plf.html_name }}"]').value = (defaults.snow * factor).toFixed(2).replace(/\.00$/, '');
+    document.querySelector('input[name="{{ form.roof_live_load_plf.html_name }}"]').value = (defaults.roof_live * factor).toFixed(2).replace(/\.00$/, '');
+    document.querySelector('input[name="{{ form.wind_load_plf.html_name }}"]').value = (defaults.wind * factor).toFixed(2).replace(/\.00$/, '');
+    renderLoadPreviews();
+}
+
+document.getElementById('{{ form.uniform_load_basis.id_for_label }}').addEventListener('change', () => {
+    updateLoadLabels();
+    updateDistributedLoadUnits();
+    applyLoadDefaults();
+});
+document.getElementById('{{ form.spacing_in.id_for_label }}').addEventListener('change', () => {
+    if (document.getElementById('{{ form.uniform_load_basis.id_for_label }}').value === 'plf') {
+        applyLoadDefaults();
+    }
+});
+updateLoadLabels();
+updateSubfloorSettingState();
+
+const MAX_SPAN_COUNT = 10;
+const spanCountSelect = document.getElementById('spanCountSelect');
+const spanCountBlocks = Array.from(document.querySelectorAll('[data-span-block]'));
+const supportCountBlocks = Array.from(document.querySelectorAll('[data-support-block]'));
+const bearingCountBlocks = Array.from(document.querySelectorAll('[data-bearing-block]'));
+const finalSupportLabel = document.getElementById('finalSupportLabel');
+const finalBearingLabel = document.getElementById('finalBearingLabel');
+const livePreviewMeta = document.getElementById('livePreviewMeta');
+
+function parsePositiveNumber(value) {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+function parseNonNegativeNumber(value) {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+}
+
+function controlValue(selector) {
+    const control = document.querySelector(selector);
+    return control ? control.value : '';
+}
+
+function inputsForBlock(block) {
+    return Array.from(block.querySelectorAll('input, select, textarea'));
+}
+
+function clearBlockInputs(block) {
+    inputsForBlock(block).forEach(input => {
+        if (input.tagName === 'SELECT') {
+            if (input.name === 'extra_support_type') {
+                input.value = 'wall_plate';
+            } else if (input.options.length) {
+                input.selectedIndex = 0;
+            }
+            return;
+        }
+        if (input.type === 'checkbox' || input.type === 'radio') {
+            input.checked = false;
+            return;
+        }
+        if (input.name === 'extra_bearing_length_in') {
+            input.value = '3.5';
+            return;
+        }
+        input.value = '';
+    });
+}
+
+function inferSpanCount() {
+    let count = 1;
+    if (parsePositiveNumber(controlValue('input[name="{{ form.span_2_ft.html_name }}"]')) > 0) {
+        count = 2;
+    }
+    if (parsePositiveNumber(controlValue('input[name="{{ form.span_3_ft.html_name }}"]')) > 0) {
+        count = 3;
+    }
+    document.querySelectorAll('input[name="extra_span_ft"]').forEach((input, index) => {
+        if (parsePositiveNumber(input.value) > 0) {
+            count = Math.max(count, index + 4);
+        }
+    });
+    return Math.min(MAX_SPAN_COUNT, count);
+}
+
+function supportLabel(index) {
+    return `B${index + 1}`;
+}
+
+function updateFinalLabels(spanCount) {
+    const finalIndex = spanCount + 1;
+    if (finalSupportLabel) {
+        finalSupportLabel.textContent = `Right support B${finalIndex} (final)`;
+    }
+    if (finalBearingLabel) {
+        finalBearingLabel.textContent = `Bearing length B${finalIndex} (final, in)`;
+    }
+}
+
+function setBlocksVisible(blocks, spanCount, shouldClearHidden) {
+    blocks.forEach(block => {
+        const blockCount = Number.parseInt(block.dataset.spanBlock || block.dataset.supportBlock || block.dataset.bearingBlock || '0', 10);
+        const visible = spanCount >= blockCount;
+        block.classList.toggle('span-hidden', !visible);
+        inputsForBlock(block).forEach(input => {
+            input.disabled = !visible;
+        });
+        if (!visible && shouldClearHidden) {
+            clearBlockInputs(block);
+        }
+    });
+}
+
+function collectSpanLayout() {
+    const spanCount = Number.parseInt(spanCountSelect.value || '1', 10);
+    const spans = [];
+    const supportTypes = [];
+    const supportBearings = [];
+
+    spans.push(parsePositiveNumber(controlValue('input[name="{{ form.span_ft.html_name }}"]')));
+    if (spanCount >= 2) {
+        spans.push(parsePositiveNumber(controlValue('input[name="{{ form.span_2_ft.html_name }}"]')));
+    }
+    if (spanCount >= 3) {
+        spans.push(parsePositiveNumber(controlValue('input[name="{{ form.span_3_ft.html_name }}"]')));
+    }
+    if (spanCount >= 4) {
+        const extraSpanInputs = Array.from(document.querySelectorAll('input[name="extra_span_ft"]'));
+        for (let i = 0; i < spanCount - 3; i += 1) {
+            spans.push(parsePositiveNumber(extraSpanInputs[i]?.value || ''));
+        }
+    }
+
+    supportTypes.push(controlValue('select[name="{{ form.support_type_left.html_name }}"]') || 'wall_plate');
+    if (spanCount >= 2) {
+        supportTypes.push(controlValue('select[name="{{ form.support_type_mid.html_name }}"]') || 'wall_plate');
+    }
+    if (spanCount >= 3) {
+        supportTypes.push(controlValue('select[name="{{ form.support_type_mid_2.html_name }}"]') || 'wall_plate');
+    }
+    if (spanCount >= 4) {
+        const extraSupportInputs = Array.from(document.querySelectorAll('select[name="extra_support_type"]'));
+        for (let i = 0; i < spanCount - 3; i += 1) {
+            supportTypes.push(extraSupportInputs[i]?.value || 'wall_plate');
+        }
+    }
+    supportTypes.push(controlValue('select[name="{{ form.support_type_right.html_name }}"]') || 'wall_plate');
+
+    supportBearings.push(parsePositiveNumber(controlValue('input[name="{{ form.bearing_length_left_in.html_name }}"]')) || 1.5);
+    if (spanCount >= 2) {
+        supportBearings.push(parsePositiveNumber(controlValue('input[name="{{ form.bearing_length_mid_in.html_name }}"]')) || 3.5);
+    }
+    if (spanCount >= 3) {
+        supportBearings.push(parsePositiveNumber(controlValue('input[name="{{ form.bearing_length_mid_2_in.html_name }}"]')) || 3.5);
+    }
+    if (spanCount >= 4) {
+        const extraBearingInputs = Array.from(document.querySelectorAll('input[name="extra_bearing_length_in"]'));
+        for (let i = 0; i < spanCount - 3; i += 1) {
+            supportBearings.push(parsePositiveNumber(extraBearingInputs[i]?.value || '') || 3.5);
+        }
+    }
+    supportBearings.push(parsePositiveNumber(controlValue('input[name="{{ form.bearing_length_right_in.html_name }}"]')) || 1.5);
+
+    return {
+        spanCount,
+        spans,
+        supportTypes,
+        supportBearings,
+        leftOverhang: parseNonNegativeNumber(controlValue('input[name="{{ form.left_overhang_ft.html_name }}"]')),
+        rightOverhang: parseNonNegativeNumber(controlValue('input[name="{{ form.right_overhang_ft.html_name }}"]')),
+        nominalSize: controlValue('#nominalSizeInput') || 'member'
+    };
+}
+
+function renderGeometryPreview(targetSvg) {
+    if (!targetSvg) {
+        return;
+    }
+
+    const layout = collectSpanLayout();
+    const validSpans = layout.spans.map(span => span > 0 ? span : 0);
+    const clearLength = validSpans.reduce((sum, span) => sum + span, 0);
+    const totalLength = Math.max(layout.leftOverhang + clearLength + layout.rightOverhang, 1);
+    const supportPositions = [];
+    let running = layout.leftOverhang;
+    supportPositions.push(running);
+    for (let i = 0; i < validSpans.length; i += 1) {
+        running += validSpans[i];
+        supportPositions.push(running);
+    }
+
+    const NS = 'http://www.w3.org/2000/svg';
+    const W = 600;
+    const H = 170;
+    const margin = 75;
+    const beamY = 90;
+    // Beam depth scales with the selected member's actual (dressed) depth
+    // so the viewer reads as a real member instead of a flat bar. Falls
+    // back to a 2x6-ish default depth when no size is picked, and is
+    // clamped so a deep 2x12 still leaves room for the supports and
+    // dimension line below it.
+    const DRESSED_DEPTHS_IN = { '2x4': 3.5, '2x6': 5.5, '2x8': 7.25, '2x10': 9.25, '2x12': 11.25 };
+    const depthIn = DRESSED_DEPTHS_IN[layout.nominalSize] || 5.5;
+    const beamH = Math.round(Math.min(34, Math.max(14, depthIn * 2.5 + 6)));
+    const beamX1 = margin;
+    const beamX2 = W - margin;
+    const beamLen = beamX2 - beamX1;
+    const beamBottom = beamY + beamH / 2;
+    const segmentDimY = beamBottom + 28;
+    const supportTextY = beamBottom + 48;
+    const bearingTextY = supportTextY + 13;
+
+    targetSvg.innerHTML = '';
+    targetSvg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+
+    const el = (tag, attrs, text) => {
+        const node = document.createElementNS(NS, tag);
+        Object.entries(attrs).forEach(([key, value]) => node.setAttribute(key, value));
+        if (text !== undefined) {
+            node.textContent = text;
+        }
+        return node;
+    };
+
+    const txt = (x, y, text, attrs = {}) => el('text', {
+        x,
+        y,
+        'font-family': 'Inter, system-ui, sans-serif',
+        'font-size': 10,
+        ...attrs
+    }, text);
+
+    const defs = el('defs', {});
+    const beamGrad = el('linearGradient', { id: `${targetSvg.id}-beam-grad`, x1: '0', y1: '0', x2: '0', y2: '1' });
+    beamGrad.appendChild(el('stop', { offset: '0%', 'stop-color': '#2a4d7a' }));
+    beamGrad.appendChild(el('stop', { offset: '55%', 'stop-color': '#1e3a6b' }));
+    beamGrad.appendChild(el('stop', { offset: '100%', 'stop-color': '#152c52' }));
+    defs.appendChild(beamGrad);
+    targetSvg.appendChild(defs);
+
+    const scaleX = value => beamX1 + (beamLen * value / totalLength);
+    const supportXs = supportPositions.map(scaleX);
+
+    // Beam graphic: beam_viewer.svg is stretch-safe (preserveAspectRatio
+    // none) so it fills the beam band directly. Kept as its own layer,
+    // separate from the bearings (drawSupport, below), so each can be
+    // swapped independently.
+    targetSvg.appendChild(el('image', {
+        x: beamX1,
+        y: beamY - beamH / 2,
+        width: beamLen,
+        height: beamH,
+        href: "{% static 'images/beam_viewer.svg' %}",
+        preserveAspectRatio: 'none'
+    }));
+
+    targetSvg.appendChild(txt((beamX1 + beamX2) / 2, beamY + 4, layout.nominalSize.toUpperCase(), {
+        'text-anchor': 'middle',
+        fill: '#ffffff',
+        'font-size': 11,
+        'font-weight': '700',
+        'letter-spacing': '0.06em'
+    }));
+
+    function drawDimension(x1, x2, y, label, color = '#94a3b8') {
+        if (Math.abs(x2 - x1) < 10) {
+            return;
+        }
+        targetSvg.appendChild(el('line', { x1, y1: y, x2, y2: y, stroke: color, 'stroke-width': 1 }));
+        targetSvg.appendChild(el('polygon', { points: `${x1},${y} ${x1 + 8},${y - 3} ${x1 + 8},${y + 3}`, fill: color }));
+        targetSvg.appendChild(el('polygon', { points: `${x2},${y} ${x2 - 8},${y - 3} ${x2 - 8},${y + 3}`, fill: color }));
+        targetSvg.appendChild(txt((x1 + x2) / 2, y + 12, label, {
+            'text-anchor': 'middle',
+            fill: '#64748b',
+            'font-family': 'JetBrains Mono, monospace'
+        }));
+    }
+
+    function drawWallPlate(x) {
+        const g = el('g', {});
+        const baseY = beamY + beamH / 2;
+        g.appendChild(el('rect', { x: x - 14, y: baseY, width: 28, height: 10, fill: '#4b5563', rx: 1 }));
+        g.appendChild(el('rect', { x: x - 18, y: baseY + 10, width: 36, height: 8, fill: '#334155', rx: 1 }));
+        return g;
+    }
+
+    function drawColumn(x) {
+        const g = el('g', {});
+        const baseY = beamY + beamH / 2;
+        g.appendChild(el('rect', { x: x - 10, y: baseY, width: 20, height: 26, fill: '#475569', rx: 1 }));
+        g.appendChild(el('line', { x1: x - 12, y1: baseY + 28, x2: x - 4, y2: baseY + 36, stroke: '#64748b', 'stroke-width': 1 }));
+        g.appendChild(el('line', { x1: x - 2, y1: baseY + 28, x2: x + 6, y2: baseY + 36, stroke: '#64748b', 'stroke-width': 1 }));
+        return g;
+    }
+
+    function drawSupport(x, type) {
+        if (type === 'column' || type === 'post') {
+            return drawColumn(x);
+        }
+        return drawWallPlate(x);
+    }
+
+    supportXs.forEach((x, index) => {
+        targetSvg.appendChild(drawSupport(x, layout.supportTypes[index] || 'wall_plate'));
+        targetSvg.appendChild(el('line', { x1: x, y1: beamY + beamH / 2 + 2, x2: x, y2: segmentDimY + 2, stroke: '#cbd5e1', 'stroke-width': 1 }));
+        targetSvg.appendChild(txt(x, supportTextY, supportLabel(index), {
+            'text-anchor': 'middle',
+            'font-family': 'JetBrains Mono, monospace',
+            'font-size': 10,
+            'font-weight': '700',
+            fill: '#0f172a'
+        }));
+        targetSvg.appendChild(txt(x, bearingTextY, `${(layout.supportBearings[index] || 0).toFixed(2).replace(/\.00$/, '')}"`, {
+            'text-anchor': 'middle',
+            'font-family': 'JetBrains Mono, monospace',
+            'font-size': 9,
+            fill: '#64748b'
+        }));
+    });
+
+    if (layout.leftOverhang > 0) {
+        drawDimension(beamX1, supportXs[0], segmentDimY, `${layout.leftOverhang.toFixed(2)} ft`);
+    }
+    for (let i = 0; i < validSpans.length; i += 1) {
+        drawDimension(supportXs[i], supportXs[i + 1], segmentDimY, `${validSpans[i].toFixed(2)} ft`);
+    }
+    if (layout.rightOverhang > 0) {
+        drawDimension(supportXs[supportXs.length - 1], beamX2, segmentDimY, `${layout.rightOverhang.toFixed(2)} ft`);
+    }
+    if (layout.spanCount > 1 || layout.leftOverhang > 0 || layout.rightOverhang > 0) {
+        drawDimension(beamX1, beamX2, segmentDimY + 18, `${totalLength.toFixed(2)} ft total`, '#64748b');
+    }
+
+    const loadTypeLabels = { dead: 'D', live: 'L', snow: 'S', roof_live: 'Lr', wind: 'W' };
+    const loadBasis = controlValue('select[name="{{ form.uniform_load_basis.html_name }}"]') || 'plf';
+    const baselineFields = [
+        ['{{ form.dead_load_plf.html_name }}', 'dead'],
+        ['{{ form.live_load_plf.html_name }}', 'live'],
+        ['{{ form.snow_load_plf.html_name }}', 'snow'],
+        ['{{ form.roof_live_load_plf.html_name }}', 'roof_live'],
+        ['{{ form.wind_load_plf.html_name }}', 'wind']
+    ];
+    const baselineComponents = baselineFields
+        .map(([name, type]) => ({ type, value: parseNonNegativeNumber(controlValue(`input[name="${name}"]`)) }))
+        .filter(component => component.value > 0);
+    const loadZones = [];
+    if (baselineComponents.length) {
+        loadZones.push({
+            start: 0,
+            end: totalLength,
+            value: baselineComponents.reduce((sum, component) => sum + component.value, 0),
+            types: baselineComponents.map(component => component.type)
+        });
+    }
+    document.querySelectorAll('[data-distributed-load-row]').forEach(row => {
+        const value = parseNonNegativeNumber(row.querySelector('input[name$="-w"]')?.value || '');
+        const startRaw = row.querySelector('input[name$="-start_ft"]')?.value.trim() || '';
+        const endRaw = row.querySelector('input[name$="-end_ft"]')?.value.trim() || '';
+        const start = parseNonNegativeNumber(startRaw);
+        const end = parseNonNegativeNumber(endRaw);
+        const type = row.querySelector('select[name$="-load_type"]')?.value || 'live';
+        if (value > 0 && startRaw !== '' && endRaw !== '' && end > start && start < totalLength) {
+            loadZones.push({ start, end: Math.min(end, totalLength), value, types: [type] });
+        }
+    });
+
+    const arrowBottom = beamY - beamH / 2;
+    const drawDownArrow = (x, y1, y2, color) => {
+        targetSvg.appendChild(el('line', { x1: x, y1, x2: x, y2: y2 - 6, stroke: color, 'stroke-width': 1.35 }));
+        targetSvg.appendChild(el('polygon', {
+            points: `${x},${y2} ${x - 4},${y2 - 7} ${x + 4},${y2 - 7}`,
+            fill: color
+        }));
+    };
+    loadZones.forEach((zone, index) => {
+        const x1 = scaleX(zone.start);
+        const x2 = scaleX(zone.end);
+        const width = Math.max(x2 - x1, 1);
+        const arrowTop = Math.min(50, 12 + index * 8);
+        const arrowCount = Math.max(1, Math.round(width / 42));
+        targetSvg.appendChild(el('line', { x1, y1: arrowTop, x2, y2: arrowTop, stroke: '#2d7dd2', 'stroke-width': 1.5 }));
+        for (let i = 0; i <= arrowCount; i += 1) {
+            drawDownArrow(x1 + width * i / arrowCount, arrowTop, arrowBottom, '#2d7dd2');
+        }
+        const label = `${zone.types.map(type => loadTypeLabels[type] || type).join('+')} ${zone.value.toFixed(1)} ${loadBasis}`;
+        targetSvg.appendChild(txt((x1 + x2) / 2, arrowTop - 2, label, {
+            'text-anchor': 'middle', fill: '#2d7dd2', 'font-size': 8, 'font-weight': '700'
+        }));
+    });
+
+    const groupedPointLoads = new Map();
+    document.querySelectorAll('[data-point-load-row]').forEach(row => {
+        const value = parseNonNegativeNumber(row.querySelector('input[name$="-p"]')?.value || '');
+        const locationRaw = row.querySelector('input[name$="-location_ft"]')?.value.trim() || '';
+        const location = parseNonNegativeNumber(locationRaw);
+        const type = row.querySelector('select[name$="-load_type"]')?.value || 'live';
+        if (value <= 0 || locationRaw === '' || location > totalLength) return;
+        const key = location.toFixed(6);
+        const grouped = groupedPointLoads.get(key) || { location, value: 0, types: [] };
+        grouped.value += value;
+        if (!grouped.types.includes(type)) grouped.types.push(type);
+        groupedPointLoads.set(key, grouped);
+    });
+    const pointLoadTop = Math.min(arrowBottom - 10, 16 + loadZones.length * 8);
+    Array.from(groupedPointLoads.values()).forEach(load => {
+        const x = scaleX(load.location);
+        drawDownArrow(x, pointLoadTop, arrowBottom, '#c2412d');
+        const nearLeft = x < beamX1 + 55;
+        const nearRight = x > beamX2 - 55;
+        const labelX = nearLeft ? x + 4 : nearRight ? x - 4 : x;
+        const anchor = nearLeft ? 'start' : nearRight ? 'end' : 'middle';
+        const label = `${load.types.map(type => loadTypeLabels[type] || type).join('+')} ${load.value.toFixed(0)} lb`;
+        targetSvg.appendChild(txt(labelX, pointLoadTop - 2, label, {
+            'text-anchor': anchor, fill: '#c2412d', 'font-size': 8, 'font-weight': '700'
+        }));
+    });
+
+    if (livePreviewMeta) {
+        const spanText = validSpans.map(value => value > 0 ? value.toFixed(2).replace(/\.00$/, '') : '--').join(' + ');
+        livePreviewMeta.textContent = `Showing ${layout.spanCount} span${layout.spanCount === 1 ? '' : 's'}${spanText ? `: ${spanText} ft` : ''}`;
+    }
+}
+
+function renderLoadPreviews() {
+    renderGeometryPreview(document.getElementById('beamLivePreviewSvg'));
+    renderGeometryPreview(document.getElementById('beamDiagramSvg'));
+}
+
+function refreshSpanLayout(options = {}) {
+    const { clearHidden = false, syncResultPreview = false } = options;
+    const spanCount = Math.min(MAX_SPAN_COUNT, Math.max(1, Number.parseInt(spanCountSelect.value || '1', 10)));
+    spanCountSelect.value = String(spanCount);
+    setBlocksVisible(spanCountBlocks, spanCount, clearHidden);
+    setBlocksVisible(supportCountBlocks, spanCount, clearHidden);
+    setBlocksVisible(bearingCountBlocks, spanCount, clearHidden);
+    updateFinalLabels(spanCount);
+    renderGeometryPreview(document.getElementById('beamLivePreviewSvg'));
+    if (syncResultPreview) {
+        renderGeometryPreview(document.getElementById('beamDiagramSvg'));
+    }
+}
+
+spanCountSelect.value = String(inferSpanCount());
+spanCountSelect.addEventListener('change', () => refreshSpanLayout({ clearHidden: true, syncResultPreview: true }));
+
+document.querySelectorAll('#tab-spans input, #tab-spans select').forEach(control => {
+    if (control === spanCountSelect) {
+        return;
+    }
+    control.addEventListener('input', () => {
+        renderGeometryPreview(document.getElementById('beamLivePreviewSvg'));
+        renderGeometryPreview(document.getElementById('beamDiagramSvg'));
+    });
+    control.addEventListener('change', () => refreshSpanLayout({ syncResultPreview: true }));
+});
+
+document.querySelectorAll('#tab-loads input, #tab-loads select, #nominalSizeInput').forEach(control => {
+    control.addEventListener('input', () => {
+        renderGeometryPreview(document.getElementById('beamLivePreviewSvg'));
+        renderGeometryPreview(document.getElementById('beamDiagramSvg'));
+    });
+    control.addEventListener('change', () => {
+        renderGeometryPreview(document.getElementById('beamLivePreviewSvg'));
+        renderGeometryPreview(document.getElementById('beamDiagramSvg'));
+    });
+});
+
+refreshSpanLayout();
+
+// ---- Size button selection ----
+function selectSize(btn, size) {
+    document.querySelectorAll('.size-btn').forEach(b => b.classList.remove('size-btn--active'));
+    btn.classList.add('size-btn--active');
+    document.getElementById('nominalSizeInput').value = size;
+    renderGeometryPreview(document.getElementById('beamLivePreviewSvg'));
+    renderGeometryPreview(document.getElementById('beamDiagramSvg'));
+}
+
+function selectMemberType(btn, memberType) {
+    document.querySelectorAll('.member-type-btn').forEach(button => button.classList.remove('member-type-btn--active'));
+    btn.classList.add('member-type-btn--active');
+    const memberTypeSelect = document.getElementById('{{ form.member_type.id_for_label }}');
+    memberTypeSelect.value = memberType;
+    updateSubfloorSettingState();
+    applyDeflectionDefaults(memberType);
+    applyLoadDefaults();
+}
+
+// ---- Double-click: run analysis for that specific size ----
+function runSingleAnalysis(size) {
+    document.getElementById('nominalSizeInput').value = size;
+    const form = document.getElementById('designForm');
+    // Create a hidden action input, submit
+    let actionInput = form.querySelector('input[name="action"][data-auto]');
+    if (!actionInput) {
+        actionInput = document.createElement('input');
+        actionInput.type = 'hidden';
+        actionInput.name = 'action';
+        actionInput.dataset.auto = '1';
+        form.appendChild(actionInput);
+    }
+    actionInput.value = 'run';
+    form.submit();
+}
+
+// ---- All Sizes: POST to all_sizes endpoint ----
+function runAllSizes() {
+    const form = document.getElementById('designForm');
+    let actionInput = form.querySelector('input[name="action"][data-auto]');
+    if (!actionInput) {
+        actionInput = document.createElement('input');
+        actionInput.type = 'hidden';
+        actionInput.name = 'action';
+        actionInput.dataset.auto = '1';
+        form.appendChild(actionInput);
+    }
+    actionInput.value = 'all_sizes';
+    form.submit();
+}
+
+// ---- Load-row editing helpers ----
+function resetLoadRow(row) {
+    row.querySelectorAll('input').forEach(input => input.value = '');
+    row.querySelectorAll('select').forEach(select => select.selectedIndex = 0);
+}
+
+function copyLoadRowValues(sourceRow, targetRow) {
+    const sourceControls = Array.from(sourceRow.querySelectorAll('input, select'));
+    const targetControls = Array.from(targetRow.querySelectorAll('input, select'));
+    sourceControls.forEach((control, index) => {
+        if (targetControls[index]) targetControls[index].value = control.value;
+    });
+}
+
+// ---- Point load rows ----
+function clearPointLoadRow(btn) {
+    const row = btn.closest('.point-load-row');
+    if (!row) return;
+    resetLoadRow(row);
+
+    const rows = getPointLoadRows();
+    const visibleRows = rows.filter(current => !current.classList.contains('is-hidden'));
+    if (visibleRows.length > 1) {
+        row.classList.add('is-hidden');
+    }
+    ensurePointLoadRowVisible();
+    updatePointLoadRowState();
+    renderLoadPreviews();
+}
+
+function getPointLoadRows() {
+    return Array.from(document.querySelectorAll('[data-point-load-row]'));
+}
+
+function ensurePointLoadRowVisible() {
+    const rows = getPointLoadRows();
+    if (rows.length && rows.every(row => row.classList.contains('is-hidden'))) {
+        rows[0].classList.remove('is-hidden');
+    }
+}
+
+function updatePointLoadRowState() {
+    const rows = getPointLoadRows();
+    const visibleCount = rows.filter(row => !row.classList.contains('is-hidden')).length;
+    const hiddenRows = rows.filter(row => row.classList.contains('is-hidden'));
+    const addButton = document.getElementById('addPointLoadBtn');
+    const counter = document.getElementById('pointLoadCounter');
+
+    if (counter) {
+        counter.textContent = `${visibleCount} point-load row${visibleCount === 1 ? '' : 's'} visible`;
+    }
+    if (addButton) {
+        addButton.disabled = hiddenRows.length === 0;
+    }
+    document.querySelectorAll('[data-copy-point-load]').forEach(button => {
+        button.disabled = hiddenRows.length === 0;
+    });
+}
+
+function addPointLoadRow() {
+    const nextHiddenRow = getPointLoadRows().find(row => row.classList.contains('is-hidden'));
+    if (!nextHiddenRow) return;
+    nextHiddenRow.classList.remove('is-hidden');
+    const firstInput = nextHiddenRow.querySelector('input, select');
+    if (firstInput) {
+        firstInput.focus();
+    }
+    updatePointLoadRowState();
+}
+
+function duplicatePointLoadRow(btn) {
+    const sourceRow = btn.closest('.point-load-row');
+    const targetRow = getPointLoadRows().find(row => row.classList.contains('is-hidden'));
+    if (!sourceRow || !targetRow) return;
+    copyLoadRowValues(sourceRow, targetRow);
+    targetRow.classList.remove('is-hidden');
+    updatePointLoadRowState();
+    renderLoadPreviews();
+    targetRow.querySelector('input')?.focus();
+}
+
+function clearAllPointLoadRows() {
+    getPointLoadRows().forEach((row, index) => {
+        resetLoadRow(row);
+        row.classList.toggle('is-hidden', index > 0);
+    });
+    updatePointLoadRowState();
+    renderLoadPreviews();
+}
+
+ensurePointLoadRowVisible();
+updatePointLoadRowState();
+
+// ---- Expandable distributed-load rows ----
+function getDistributedLoadRows() {
+    return Array.from(document.querySelectorAll('[data-distributed-load-row]'));
+}
+
+function ensureDistributedLoadRowVisible() {
+    const rows = getDistributedLoadRows();
+    if (rows.length && rows.every(row => row.classList.contains('is-hidden'))) {
+        rows[0].classList.remove('is-hidden');
+    }
+}
+
+function updateDistributedLoadRowState() {
+    const rows = getDistributedLoadRows();
+    const visibleCount = rows.filter(row => !row.classList.contains('is-hidden')).length;
+    const hiddenCount = rows.length - visibleCount;
+    const addButton = document.getElementById('addDistributedLoadBtn');
+    const counter = document.getElementById('distributedLoadCounter');
+    if (counter) {
+        counter.textContent = `${visibleCount} distributed-load row${visibleCount === 1 ? '' : 's'} visible`;
+    }
+    if (addButton) addButton.disabled = hiddenCount === 0;
+    document.querySelectorAll('[data-copy-distributed-load]').forEach(button => {
+        button.disabled = hiddenCount === 0;
+    });
+}
+
+function clearDistributedLoadRow(btn) {
+    const row = btn.closest('.distributed-load-row');
+    if (!row) return;
+    resetLoadRow(row);
+    const visibleRows = getDistributedLoadRows().filter(current => !current.classList.contains('is-hidden'));
+    if (visibleRows.length > 1) row.classList.add('is-hidden');
+    ensureDistributedLoadRowVisible();
+    updateDistributedLoadRowState();
+    renderLoadPreviews();
+}
+
+function addDistributedLoadRow() {
+    const nextRow = getDistributedLoadRows().find(row => row.classList.contains('is-hidden'));
+    if (!nextRow) return;
+    nextRow.classList.remove('is-hidden');
+    const firstInput = nextRow.querySelector('input, select');
+    if (firstInput) firstInput.focus();
+    updateDistributedLoadRowState();
+}
+
+function duplicateDistributedLoadRow(btn) {
+    const sourceRow = btn.closest('.distributed-load-row');
+    const targetRow = getDistributedLoadRows().find(row => row.classList.contains('is-hidden'));
+    if (!sourceRow || !targetRow) return;
+    copyLoadRowValues(sourceRow, targetRow);
+    targetRow.classList.remove('is-hidden');
+    updateDistributedLoadRowState();
+    renderLoadPreviews();
+    targetRow.querySelector('input')?.focus();
+}
+
+function clearAllDistributedLoadRows() {
+    getDistributedLoadRows().forEach((row, index) => {
+        resetLoadRow(row);
+        row.classList.toggle('is-hidden', index > 0);
+    });
+    updateDistributedLoadRowState();
+    renderLoadPreviews();
+}
+
+function updateDistributedLoadUnits() {
+    const basis = document.getElementById('{{ form.uniform_load_basis.id_for_label }}').value;
+    document.querySelectorAll('[data-zone-load-label]').forEach(label => {
+        label.textContent = `Intensity (${basis})`;
+    });
+}
+
+ensureDistributedLoadRowVisible();
+updateDistributedLoadRowState();
+updateDistributedLoadUnits();
+
+// ---- Named load templates ----
+let loadTemplates = JSON.parse(document.getElementById('beam-load-template-data').textContent || '[]');
+const loadTemplateSelect = document.getElementById('loadTemplateSelect');
+const loadTemplateName = document.getElementById('loadTemplateName');
+const loadTemplateStatus = document.getElementById('loadTemplateStatus');
+
+function setLoadTemplateStatus(message, isError = false) {
+    loadTemplateStatus.textContent = message;
+    loadTemplateStatus.style.color = isError ? 'var(--fc-danger)' : 'var(--fc-text-muted)';
+}
+
+function rebuildLoadTemplateSelect(selectedId = '') {
+    loadTemplateSelect.replaceChildren(new Option('Choose a template', ''));
+    loadTemplates
+        .slice()
+        .sort((left, right) => left.name.localeCompare(right.name))
+        .forEach(template => loadTemplateSelect.add(new Option(template.name, String(template.id))));
+    loadTemplateSelect.value = selectedId ? String(selectedId) : '';
+}
+
+function populateTemplateRows(rows, loads, fields) {
+    rows.forEach((row, index) => {
+        resetLoadRow(row);
+        row.classList.toggle('is-hidden', index > 0);
+    });
+    loads.slice(0, rows.length).forEach((load, index) => {
+        const row = rows[index];
+        row.classList.remove('is-hidden');
+        Object.entries(fields).forEach(([selector, key]) => {
+            const control = row.querySelector(selector);
+            if (control) control.value = load[key] ?? '';
+        });
+    });
+}
+
+function applySelectedLoadTemplate() {
+    const template = loadTemplates.find(item => String(item.id) === loadTemplateSelect.value);
+    if (!template) {
+        setLoadTemplateStatus('Choose a saved template first.', true);
+        return;
+    }
+    document.getElementById('{{ form.uniform_load_basis.id_for_label }}').value = template.uniform_load_basis;
+    document.getElementById('{{ form.spacing_in.id_for_label }}').value = template.spacing_in;
+    const baselineValues = {
+        '{{ form.dead_load_plf.html_name }}': template.dead_load_plf,
+        '{{ form.live_load_plf.html_name }}': template.live_load_plf,
+        '{{ form.snow_load_plf.html_name }}': template.snow_load_plf,
+        '{{ form.roof_live_load_plf.html_name }}': template.roof_live_load_plf,
+        '{{ form.wind_load_plf.html_name }}': template.wind_load_plf
+    };
+    Object.entries(baselineValues).forEach(([name, value]) => {
+        const input = document.querySelector(`input[name="${name}"]`);
+        if (input) input.value = value ?? 0;
+    });
+    populateTemplateRows(getPointLoadRows(), template.point_loads || [], {
+        'input[name$="-p"]': 'p',
+        'input[name$="-location_ft"]': 'location_ft',
+        'select[name$="-load_type"]': 'load_type'
+    });
+    populateTemplateRows(getDistributedLoadRows(), template.distributed_loads || [], {
+        'input[name$="-w"]': 'w',
+        'input[name$="-start_ft"]': 'start_ft',
+        'input[name$="-end_ft"]': 'end_ft',
+        'select[name$="-load_type"]': 'load_type'
+    });
+    loadTemplateName.value = template.name;
+    updateLoadLabels();
+    updateDistributedLoadUnits();
+    updatePointLoadRowState();
+    updateDistributedLoadRowState();
+    renderLoadPreviews();
+    setLoadTemplateStatus(`Applied "${template.name}".`);
+}
+
+async function saveLoadTemplate() {
+    const name = loadTemplateName.value.trim();
+    if (!name) {
+        setLoadTemplateStatus('Enter a template name.', true);
+        loadTemplateName.focus();
+        return;
+    }
+    const formData = new FormData(document.getElementById('designForm'));
+    formData.set('load_template_name', name);
+    setLoadTemplateStatus('Saving template...');
+    const response = await fetch("{% url 'beams:create_load_template' %}", {
+        method: 'POST',
+        body: formData
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+        setLoadTemplateStatus(payload.error || 'Could not save the template.', true);
+        return;
+    }
+    const existingIndex = loadTemplates.findIndex(item => item.id === payload.template.id);
+    if (existingIndex >= 0) loadTemplates[existingIndex] = payload.template;
+    else loadTemplates.push(payload.template);
+    rebuildLoadTemplateSelect(payload.template.id);
+    setLoadTemplateStatus(payload.created ? `Saved "${payload.template.name}".` : `Updated "${payload.template.name}".`);
+}
+
+async function deleteSelectedLoadTemplate() {
+    const template = loadTemplates.find(item => String(item.id) === loadTemplateSelect.value);
+    if (!template) {
+        setLoadTemplateStatus('Choose a saved template first.', true);
+        return;
+    }
+    if (!confirm(`Delete load template "${template.name}"?`)) return;
+    const formData = new FormData();
+    formData.set('csrfmiddlewaretoken', document.querySelector('input[name="csrfmiddlewaretoken"]').value);
+    const url = "{% url 'beams:delete_load_template' 0 %}".replace('/0/', `/${template.id}/`);
+    const response = await fetch(url, { method: 'POST', body: formData });
+    const payload = await response.json();
+    if (!response.ok) {
+        setLoadTemplateStatus(payload.error || 'Could not delete the template.', true);
+        return;
+    }
+    loadTemplates = loadTemplates.filter(item => item.id !== template.id);
+    rebuildLoadTemplateSelect();
+    loadTemplateName.value = '';
+    setLoadTemplateStatus(`Deleted "${template.name}".`);
+}
+
+loadTemplateSelect.addEventListener('change', () => {
+    const template = loadTemplates.find(item => String(item.id) === loadTemplateSelect.value);
+    loadTemplateName.value = template?.name || '';
+    setLoadTemplateStatus('');
+});
+
+// ---- Size buttons active style ----
+const style = document.createElement('style');
+style.textContent = `
+.size-btn--active {
+    background: var(--fc-blue-light) !important;
+    border-color: var(--fc-blue-light) !important;
+    color: #fff !important;
+}
+.size-btn { padding: 0.4rem 0.25rem; font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; }
+`;
+document.head.appendChild(style);
+</script>
+{% endblock %}

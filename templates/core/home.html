@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+
+{% block title %}FrameCalc | Structural Sizing{% endblock %}
+
+{% block content %}
+<div class="page-container" style="max-width:640px;margin:4rem auto;text-align:center;">
+    <div style="margin-bottom:2rem;">
+        <div class="brand-mark" style="width:56px;height:56px;font-size:1.1rem;margin:0 auto 1.25rem;background:var(--fc-navy);">FC</div>
+        <h1 style="font-size:1.75rem;font-weight:700;color:var(--fc-gray-900);letter-spacing:-.03em;margin-bottom:.5rem;">FrameCalc</h1>
+        <p style="font-size:1rem;color:var(--fc-text-muted);">Structural member sizing for residential framing.<br>SPF No. 2 &mdash; NDS 2018 &mdash; IRC R301.7</p>
+    </div>
+    {% if user.is_authenticated %}
+    <div style="display:flex;gap:.75rem;justify-content:center;flex-wrap:wrap;">
+        <a href="{% url 'beams:design' %}" class="fc-btn fc-btn--primary fc-btn--lg"><i class="bi bi-plus"></i> New Design</a>
+        <a href="{% url 'beams:list' %}" class="fc-btn fc-btn--secondary fc-btn--lg"><i class="bi bi-archive"></i> My Designs</a>
+        <a href="{% url 'core:guide' %}" class="fc-btn fc-btn--secondary fc-btn--lg"><i class="bi bi-book"></i> Quick Start Guide</a>
+    </div>
+    {% else %}
+    <a href="{% url 'login' %}" class="fc-btn fc-btn--primary fc-btn--lg">Sign in to get started</a>
+    {% endif %}
+    <p style="font-size:0.7rem;color:var(--fc-text-xmuted);margin-top:2rem;">Preliminary sizing only. Not a substitute for licensed engineering review.</p>
+</div>
+{% endblock %}

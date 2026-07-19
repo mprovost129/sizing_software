@@ -1,0 +1,179 @@
+{% extends 'base.html' %}
+
+{% block title %}Quick Start Guide | FrameCalc{% endblock %}
+
+{% block extra_css %}
+<style>
+.guide-layout { display: grid; grid-template-columns: 220px 1fr; gap: 2rem; max-width: 1100px; margin: 0 auto; }
+@media (max-width: 860px){ .guide-layout { grid-template-columns: 1fr; } .guide-toc { position: static !important; } }
+.guide-toc { position: sticky; top: 72px; align-self: start; font-size: .8rem; }
+.guide-toc a { display: block; color: var(--fc-text-muted); text-decoration: none; padding: .3rem 0; border-left: 2px solid transparent; padding-left: .75rem; }
+.guide-toc a:hover { color: var(--fc-blue-light); border-left-color: var(--fc-blue-light); }
+.guide-section { margin-bottom: 2.5rem; }
+.guide-section h2 { font-size: 1.05rem; font-weight: 600; color: var(--fc-gray-900); margin: 0 0 .35rem; letter-spacing: -.01em; }
+.guide-section .lead { color: var(--fc-text-muted); font-size: .85rem; margin-bottom: 1rem; }
+.guide-step { display: flex; gap: .85rem; margin-bottom: 1rem; align-items: flex-start; }
+.guide-step-num { flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%; background: var(--fc-navy); color: #fff; font-size: .72rem; font-weight: 600; display: flex; align-items: center; justify-content: center; margin-top: 1px; }
+.guide-step-body { font-size: .85rem; color: var(--fc-gray-700); }
+.guide-step-body strong { color: var(--fc-gray-900); font-weight: 600; }
+.tab-chip { display:inline-block; font-family:'JetBrains Mono',monospace; font-size:.72rem; background: var(--fc-sky); color: var(--fc-blue); padding: .1rem .45rem; border-radius: 4px; font-weight:500; }
+.check-key { display:grid; grid-template-columns: 160px 1fr; gap:.4rem 1rem; font-size:.82rem; margin-top:.5rem; }
+.check-key dt { font-weight:600; color: var(--fc-gray-800); font-family:'JetBrains Mono',monospace; font-size:.78rem; }
+.check-key dd { margin:0; color: var(--fc-text-muted); }
+.callout { background: var(--fc-sky); border:1px solid #bfdbfe; border-radius: var(--fc-radius); padding:.75rem 1rem; font-size:.8rem; color: var(--fc-blue); margin: 1rem 0; }
+.roadmap-tag { display:inline-block; font-size:.66rem; text-transform:uppercase; letter-spacing:.05em; background: var(--fc-warn-bg); color: var(--fc-warn); padding:.1rem .4rem; border-radius:3px; font-weight:600; margin-left:.4rem; vertical-align:middle; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <h1 class="page-title">Quick Start Guide</h1>
+        <p class="page-subtitle">How to size a member, read the results, and save your work</p>
+    </div>
+
+    <div class="guide-layout">
+        <nav class="guide-toc">
+            <a href="#overview">Overview</a>
+            <a href="#workflow">The design workflow</a>
+            <a href="#span">1 &middot; Span</a>
+            <a href="#loads">2 &middot; Loads</a>
+            <a href="#member">3 &middot; Member</a>
+            <a href="#run">Running an analysis</a>
+            <a href="#results">Reading the results</a>
+            <a href="#scan">Scanning all sizes</a>
+            <a href="#save">Saving &amp; designs</a>
+            <a href="#coming">Coming soon</a>
+        </nav>
+
+        <div>
+            <section class="guide-section" id="overview">
+                <h2>Overview</h2>
+                <p class="lead">
+                    FrameCalc sizes residential framing members using code calculations, then tells you
+                    whether a given member passes and by how much. It is modeled on the way tools like
+                    BC CALC work: set your span, apply loads, pick a member, and analyze.
+                </p>
+                <p style="font-size:.85rem;color:var(--fc-gray-700);">
+                    The current release checks a sawn-lumber material library
+                    (currently SPF, Douglas Fir-Larch, and Hem-Fir grades over 2x4 through 2x12 sizes)
+                    against NDS 2018 and IRC R301.7, with single-span support fully in place
+                    and a first-pass continuous workflow for 2-span through 10-span members, including end overhangs, now available. Results are preliminary sizing
+                    estimates, not stamped engineering.
+                </p>
+            </section>
+
+            <section class="guide-section" id="workflow">
+                <h2>The design workflow</h2>
+                <p class="lead">A new design has three input tabs and two ways to analyze.</p>
+                <div class="guide-step">
+                    <div class="guide-step-num">1</div>
+                    <div class="guide-step-body"><span class="tab-chip">Span</span> &nbsp; Set one span by default, then continue through the continuous-span rows as needed up to 10 spans total.</div>
+                </div>
+                <div class="guide-step">
+                    <div class="guide-step-num">2</div>
+                    <div class="guide-step-body"><span class="tab-chip">Loads</span> &nbsp; Enter standard load components as either area loads (psf) or line loads (plf), plus any point loads.</div>
+                </div>
+                <div class="guide-step">
+                    <div class="guide-step-num">3</div>
+                    <div class="guide-step-body"><span class="tab-chip">Settings</span> &nbsp; Choose the member type, deflection criteria, and the nominal size to check.</div>
+                </div>
+                <div class="guide-step">
+                    <div class="guide-step-num">&rarr;</div>
+                    <div class="guide-step-body">Then either <strong>Run Analysis</strong> to check the selected size, or <strong>All Sizes</strong> to scan every section and get the most economical one that passes.</div>
+                </div>
+            </section>
+
+            <section class="guide-section" id="span">
+                <h2>1 &middot; Span tab</h2>
+                <p class="lead">Define the geometry of the member and its supports.</p>
+                <div class="guide-step"><div class="guide-step-num">&bull;</div><div class="guide-step-body"><strong>Span 1 / Span 2 / Span 3 plus the additional rows</strong> define one clear span or a first-pass continuous member with up to ten spans.</div></div>
+                <div class="guide-step"><div class="guide-step-num">&bull;</div><div class="guide-step-body"><strong>Left / right overhangs</strong> can be combined with that continuous layout, and the member preview plus cantilever tip checks will follow the full beam geometry.</div></div>
+                <div class="guide-step"><div class="guide-step-num">&bull;</div><div class="guide-step-body"><strong>Support types</strong> choose how each support is carried: wall/plate, column/post, or hanger. This drives the support symbol drawn in the loading diagram.</div></div>
+                <div class="guide-step"><div class="guide-step-num">&bull;</div><div class="guide-step-body"><strong>Bearing lengths</strong> at each support feed the bearing (Fc-perp) checks and the bearing area factor Cb.</div></div>
+            </section>
+
+            <section class="guide-section" id="loads">
+                <h2>2 &middot; Loads tab</h2>
+                <p class="lead">Enter at least one load. Uniform loads are the tributary load on this member.</p>
+                <div class="guide-step"><div class="guide-step-num">&bull;</div><div class="guide-step-body"><strong>Uniform load basis</strong> lets you work in area load (psf) or line load (plf). psf entries convert to plf using the on-center spacing.</div></div>
+                <div class="guide-step"><div class="guide-step-num">&bull;</div><div class="guide-step-body"><strong>D / L / S / Lr / W</strong> are available as full-length uniform components. Each carries its own load-duration factor (CD): dead 0.9, live 1.0, snow 1.15, roof live 1.25, wind 1.6.</div></div>
+                <div class="guide-step"><div class="guide-step-num">&bull;</div><div class="guide-step-body"><strong>Point loads</strong> take a magnitude (lb), a location from the left support (ft), and a load type. Add up to three.</div></div>
+                <div class="callout">
+                    The engine evaluates each relevant load combination separately and keeps the governing one for each check, the same way you would verify by hand.
+                </div>
+            </section>
+
+            <section class="guide-section" id="member">
+                <h2>3 &middot; Settings tab</h2>
+                <p class="lead">Pick the section and how it is used.</p>
+                <div class="guide-step"><div class="guide-step-num">&bull;</div><div class="guide-step-body"><strong>Object toolbar</strong> picks the member workflow first, more like BC Calc's joist / beam / rafter object buttons.</div></div>
+                <div class="guide-step"><div class="guide-step-num">&bull;</div><div class="guide-step-body"><strong>Material</strong> selects the sawn-lumber species/grade library entry used for the checks, separate from the nominal size buttons.</div></div>
+                <div class="guide-step"><div class="guide-step-num">&bull;</div><div class="guide-step-body"><strong>Member type</strong> (floor joist, ceiling joist, rafter, beam/header) seeds the default deflection limits per IRC Table R301.7.</div></div>
+                <div class="guide-step"><div class="guide-step-num">&bull;</div><div class="guide-step-body"><strong>Back-span and cantilever deflection criteria</strong> are editable, matching the BC Calc-style Settings workflow.</div></div>
+                <div class="guide-step"><div class="guide-step-num">&bull;</div><div class="guide-step-body"><strong>Performance target</strong> tightens the recommended deflection criteria above bare IRC minimums when you want a stiffer feel or harder-finish focus.</div></div>
+                <div class="guide-step"><div class="guide-step-num">&bull;</div><div class="guide-step-body"><strong>Subfloor / floor feel</strong> further tightens floor-joist serviceability targets only; it does not assume composite action or add structural capacity.</div></div>
+                <div class="guide-step"><div class="guide-step-num">&bull;</div><div class="guide-step-body"><strong>Member size</strong> is a row of buttons (2x4 to 2x12). Click to select; double-click to select and immediately run.</div></div>
+                <div class="guide-step"><div class="guide-step-num">&bull;</div><div class="guide-step-body"><strong>Repetitive member</strong> applies Cr = 1.15 to bending when members are &le; 24 in o.c., 3 or more, joined by sheathing.</div></div>
+                <div class="guide-step"><div class="guide-step-num">&bull;</div><div class="guide-step-body"><strong>Design name</strong> is optional and only used when you save.</div></div>
+                <div class="guide-step"><div class="guide-step-num">&bull;</div><div class="guide-step-body"><strong>Project</strong> is optional when saving. You can pick an existing project or type a new one inline to start grouping related designs.</div></div>
+            </section>
+
+            <section class="guide-section" id="run">
+                <h2>Running an analysis</h2>
+                <p class="lead">Two buttons, two behaviors.</p>
+                <div class="guide-step"><div class="guide-step-num">&bull;</div><div class="guide-step-body"><strong>Run Analysis</strong> checks the currently selected size and fills the results panel. Double-clicking a size button does the same for that size.</div></div>
+                <div class="guide-step"><div class="guide-step-num">&bull;</div><div class="guide-step-body"><strong>All Sizes</strong> runs every section and shows a scan table, highlighting the most economical passing member. This is currently single-span only.</div></div>
+            </section>
+
+            <section class="guide-section" id="results">
+                <h2>Reading the results</h2>
+                <p class="lead">The results panel leads with a pass/fail verdict, then the detail.</p>
+                <div class="guide-step"><div class="guide-step-num">&bull;</div><div class="guide-step-body">A green <strong>PASS</strong> or red <strong>FAIL</strong> banner names the section and the governing check. Failing checks are shown in red.</div></div>
+                <div class="guide-step"><div class="guide-step-num">&bull;</div><div class="guide-step-body">Stat pills show the section properties (A, S, I) and the size and repetitive factors used.</div></div>
+                <div class="guide-step"><div class="guide-step-num">&bull;</div><div class="guide-step-body">The <strong>loading diagram</strong> draws the beam, supports, distributed load, and reactions to scale.</div></div>
+                <div class="guide-step"><div class="guide-step-num">&bull;</div><div class="guide-step-body">The <strong>load combinations</strong> table lists reactions, max shear, and max moment per combo.</div></div>
+                <div class="guide-step"><div class="guide-step-num">&bull;</div><div class="guide-step-body">The <strong>design checks</strong> table gives demand, capacity, utilization ratio, and governing combo for each check.</div></div>
+                <p style="font-size:.85rem;color:var(--fc-gray-800);margin-top:1rem;font-weight:600;">The six checks:</p>
+                <dl class="check-key">
+                    <dt>Bending</dt><dd>f<sub>b</sub> = M/S vs F'<sub>b</sub> = F<sub>b</sub> &times; C<sub>F</sub> &times; C<sub>r</sub> &times; C<sub>D</sub></dd>
+                    <dt>Shear</dt><dd>f<sub>v</sub> = 1.5V/A vs F'<sub>v</sub> = F<sub>v</sub> &times; C<sub>D</sub></dd>
+                    <dt>Bearing L / R</dt><dd>R / (b &times; L<sub>b</sub>) vs F<sub>c-perp</sub> &times; C<sub>b</sub>, at each support</dd>
+                    <dt>Deflection (live)</dt><dd>transient-load deflection vs the live limit (e.g. L/360)</dd>
+                    <dt>Deflection (total)</dt><dd>total-load deflection vs the total limit (L/240)</dd>
+                </dl>
+            </section>
+
+            <section class="guide-section" id="scan">
+                <h2>Scanning all sizes</h2>
+                <p class="lead">The All Sizes view is how you find the smallest member that works.</p>
+                <div class="guide-step"><div class="guide-step-num">&bull;</div><div class="guide-step-body">Every section is listed with each check ratio color-coded green, amber (tight), or red (fails).</div></div>
+                <div class="guide-step"><div class="guide-step-num">&bull;</div><div class="guide-step-body">The most economical passing size is flagged <strong>Best</strong> and highlighted.</div></div>
+                <div class="guide-step"><div class="guide-step-num">&bull;</div><div class="guide-step-body">Double-click any passing row to load that size back into the designer.</div></div>
+            </section>
+
+            <section class="guide-section" id="save">
+                <h2>Saving &amp; designs</h2>
+                <p class="lead">Keep a record of a member you have sized.</p>
+                <div class="guide-step"><div class="guide-step-num">&bull;</div><div class="guide-step-body">Give the design a name in Settings, optionally assign or create a project there, then click the <strong>save</strong> (disk) button.</div></div>
+                <div class="guide-step"><div class="guide-step-num">&bull;</div><div class="guide-step-body"><strong>Designs</strong> in the top nav groups everything you have saved by project, with each design still showing its pass/fail status and governing ratio.</div></div>
+                <div class="guide-step"><div class="guide-step-num">&bull;</div><div class="guide-step-body">Open a saved design to see the full results, export it to CSV, or delete it. Saved designs recompute from stored inputs, so results stay current if the engine is refined.</div></div>
+            </section>
+
+            <section class="guide-section" id="coming">
+                <h2>Coming soon</h2>
+                <p class="lead">On the roadmap, modeled on BC CALC's fuller workflow.</p>
+                <div class="guide-step"><div class="guide-step-num">&bull;</div><div class="guide-step-body">Full multi-span workflow beyond the current first-pass 10-span support: more spans and richer continuity cases <span class="roadmap-tag">planned</span></div></div>
+                <div class="guide-step"><div class="guide-step-num">&bull;</div><div class="guide-step-body">Further Settings-tab growth: vibration guidance, finish-sensitive presets, and richer member-specific serviceability tuning <span class="roadmap-tag">planned</span></div></div>
+                <div class="guide-step"><div class="guide-step-num">&bull;</div><div class="guide-step-body">Expanded project records with dedicated project pages and exports <span class="roadmap-tag">planned</span></div></div>
+                <div class="guide-step"><div class="guide-step-num">&bull;</div><div class="guide-step-body">Further engineering-report expansion beyond the current calculation-package PDF: cover sheets, assumptions, and richer formal-report structure <span class="roadmap-tag">planned</span></div></div>
+                <div class="guide-step"><div class="guide-step-num">&bull;</div><div class="guide-step-body">More materials: LVL, glulam, I-joists, and steel <span class="roadmap-tag">planned</span></div></div>
+            </section>
+
+            <div style="border-top:1px solid var(--fc-border);padding-top:1.25rem;margin-top:1rem;">
+                <a href="{% url 'beams:design' %}" class="fc-btn fc-btn--primary fc-btn--lg"><i class="bi bi-play-fill"></i> Start a design</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

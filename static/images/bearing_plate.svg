@@ -1,0 +1,52 @@
+<?xml version="1.0" standalone="no"?>
+<svg viewBox="0 0 1024 768" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" stroke-linecap="round" stroke-linejoin="round" fill-rule="evenodd" xml:space="preserve" style="background-color:rgb(0,0,0);" >
+<defs >
+<style >g[clip-path] > * {vector-effect: non-scaling-stroke;}</style>
+<clipPath id="clipId0" >
+<path d="M0,768 1024,768 1024,0 0,0 z" />
+</clipPath>
+</defs>
+<g clip-path="url(#clipId0)" fill="none" stroke="rgb(255,255,255)" stroke-width="1px" />
+<g clip-path="url(#clipId0)" fill="none" stroke="rgb(255,255,255)" stroke-width="1px" >
+<polyline points="10.0392,566.531 1013.96,566.531 " />
+</g>
+<g clip-path="url(#clipId0)" fill="rgb(128,128,128)" stroke="rgb(128,128,128)" stroke-width="1px" >
+<path d="M55.672,501.381 55.672,266.619 269.059,423.786 z" />
+<path d="M269.059,423.786 55.672,266.619 269.059,344.214 z" />
+<path d="M378.47,520.898 269.059,520.898 378.47,481.112 z" />
+<path d="M269.059,423.786 269.059,344.214 378.47,384 z" />
+<path d="M378.47,286.888 269.059,247.102 378.47,247.102 z" />
+<path d="M378.47,520.898 378.47,481.112 512,520.898 z" />
+<path d="M512,520.898 378.47,481.112 512,432.556 z" />
+<path d="M378.47,286.888 378.47,247.102 512,335.444 z" />
+<path d="M512,335.444 378.47,247.102 512,247.102 z" />
+<path d="M512,520.898 512,432.556 645.53,520.898 z" />
+<path d="M645.53,520.898 512,432.556 645.53,481.112 z" />
+<path d="M512,335.444 512,247.102 645.53,286.888 z" />
+<path d="M645.53,286.888 512,247.102 645.53,247.102 z" />
+<path d="M645.53,520.898 645.53,481.112 754.941,520.898 z" />
+<path d="M754.941,423.786 645.53,384 754.941,344.214 z" />
+<path d="M645.53,286.888 645.53,247.102 754.941,247.102 z" />
+<path d="M754.941,423.786 754.941,344.214 968.328,501.381 z" />
+<path d="M968.328,501.381 754.941,344.214 968.328,266.619 z" />
+</g>
+<g clip-path="url(#clipId0)" fill="none" stroke="rgb(255,255,255)" stroke-width="1px" >
+<polyline points="269.059,520.898 754.941,520.898 " />
+<polyline points="1013.96,566.531 1013.96,201.469 " />
+<polyline points="968.328,501.381 968.328,266.619 " />
+<polyline points="1013.96,201.469 10.0392,201.469 " />
+<polyline points="754.941,247.102 269.059,247.102 " />
+<polyline points="10.0392,201.469 10.0392,566.531 " />
+<polyline points="55.672,266.619 55.672,501.381 " />
+<polyline points="10.0392,566.531 1013.96,201.469 " />
+<polyline points="645.53,384 968.328,266.619 " />
+<polyline points="55.672,501.381 378.47,384 " />
+<polyline points="269.059,520.898 512,432.556 " />
+<polyline points="512,335.444 754.941,247.102 " />
+<polyline points="1013.96,566.531 10.0392,201.469 " />
+<polyline points="968.328,501.381 645.53,384 " />
+<polyline points="378.47,384 55.672,266.619 " />
+<polyline points="754.941,520.898 512,432.556 " />
+<polyline points="512,335.444 269.059,247.102 " />
+</g>
+</svg>

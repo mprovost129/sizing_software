@@ -1,0 +1,268 @@
+{% if result %}
+<style>
+.analysis-diagram-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+}
+.analysis-diagram-card {
+    display: grid;
+    gap: 0.65rem;
+    padding: 0.95rem;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 16px;
+    background:
+        radial-gradient(circle at top right, rgba(148, 163, 184, 0.08), transparent 30%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.96));
+}
+.analysis-diagram-meta {
+    display: grid;
+    gap: 0.2rem;
+}
+.analysis-diagram-meta strong {
+    font-size: 0.84rem;
+    color: var(--fc-gray-900);
+}
+.analysis-diagram-meta span {
+    font-size: 0.72rem;
+    color: var(--fc-text-muted);
+    line-height: 1.4;
+}
+.analysis-diagram-shell {
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(241, 245, 249, 0.96));
+    border: 1px solid var(--fc-border);
+    border-radius: var(--fc-radius-lg);
+    padding: 0.55rem;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+@media (max-width: 980px) {
+    .analysis-diagram-grid {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+
+<div class="fc-card" style="margin-bottom:1.25rem;">
+    <div class="fc-card-header">
+        <span class="fc-card-title"><i class="bi bi-layers"></i> Load Combinations</span>
+        <span style="font-size:0.72rem;color:var(--fc-text-muted);">NDS 2018 Table 2.3.2</span>
+    </div>
+    <table class="checks-table">
+        <thead>
+            <tr>
+                <th>Combo</th>
+                <th>C<sub>D</sub></th>
+                {% for label in result.summary.support_labels %}
+                <th>{{ label }} (lb)</th>
+                {% endfor %}
+                <th>V<sub>max</sub> (lb)</th>
+                <th>M<sub>max</sub> (ft-lb)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for combo in result.summary.combos %}
+            <tr>
+                <td class="mono" style="font-weight:500;">{{ combo.name }}</td>
+                <td class="mono">{{ combo.cd|floatformat:2 }}</td>
+                {% for reaction in combo.reactions %}
+                <td class="mono">{{ reaction|floatformat:0 }}</td>
+                {% endfor %}
+                <td class="mono">{{ combo.v_max|floatformat:0 }}</td>
+                <td class="mono">{{ combo.m_max|floatformat:0 }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="fc-card" style="margin-bottom:1.25rem;">
+    <div class="fc-card-header">
+        <span class="fc-card-title"><i class="bi bi-graph-up"></i> Analysis Diagrams</span>
+        <span style="font-size:0.72rem;color:var(--fc-text-muted);">Governing shear, moment, and deflection plots</span>
+    </div>
+    <div class="fc-card-body">
+        <div class="analysis-diagram-grid">
+            <div class="analysis-diagram-card">
+                <div class="analysis-diagram-meta">
+                    <strong>{{ result.summary.shear_diagram.name }}</strong>
+                    <span>{{ result.summary.shear_diagram.governing_combo }} &middot; peak {{ result.summary.shear_diagram.peak_y|floatformat:2 }} {{ result.summary.shear_diagram.unit }} @ {{ result.summary.shear_diagram.peak_x|floatformat:2 }} ft</span>
+                </div>
+                <div class="analysis-diagram-shell"><svg id="shearDiagramSvg" viewBox="0 0 520 180" height="180"></svg></div>
+            </div>
+            <div class="analysis-diagram-card">
+                <div class="analysis-diagram-meta">
+                    <strong>{{ result.summary.moment_diagram.name }}</strong>
+                    <span>{{ result.summary.moment_diagram.governing_combo }} &middot; peak {{ result.summary.moment_diagram.peak_y|floatformat:2 }} {{ result.summary.moment_diagram.unit }} @ {{ result.summary.moment_diagram.peak_x|floatformat:2 }} ft</span>
+                </div>
+                <div class="analysis-diagram-shell"><svg id="momentDiagramSvg" viewBox="0 0 520 180" height="180"></svg></div>
+            </div>
+            <div class="analysis-diagram-card">
+                <div class="analysis-diagram-meta">
+                    <strong>{{ result.summary.deflection_live_diagram.name }}</strong>
+                    <span>{{ result.summary.deflection_live_diagram.governing_combo }} &middot; peak {{ result.summary.deflection_live_diagram.peak_y|floatformat:3 }} {{ result.summary.deflection_live_diagram.unit }} @ {{ result.summary.deflection_live_diagram.peak_x|floatformat:2 }} ft</span>
+                </div>
+                <div class="analysis-diagram-shell"><svg id="deflectionLiveDiagramSvg" viewBox="0 0 520 180" height="180"></svg></div>
+            </div>
+            <div class="analysis-diagram-card">
+                <div class="analysis-diagram-meta">
+                    <strong>{{ result.summary.deflection_total_diagram.name }}</strong>
+                    <span>{{ result.summary.deflection_total_diagram.governing_combo }} &middot; peak {{ result.summary.deflection_total_diagram.peak_y|floatformat:3 }} {{ result.summary.deflection_total_diagram.unit }} @ {{ result.summary.deflection_total_diagram.peak_x|floatformat:2 }} ft</span>
+                </div>
+                <div class="analysis-diagram-shell"><svg id="deflectionTotalDiagramSvg" viewBox="0 0 520 180" height="180"></svg></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="fc-card">
+    <div class="fc-card-header">
+        <span class="fc-card-title"><i class="bi bi-clipboard-check"></i> Design Checks</span>
+        <span style="font-size:0.72rem;color:var(--fc-text-muted);">NDS 2018 &middot; IRC R301.7</span>
+    </div>
+    <table class="checks-table">
+        <thead>
+            <tr>
+                <th>Check</th>
+                <th>Demand</th>
+                <th>Capacity</th>
+                <th>Ratio</th>
+                <th>Combo</th>
+                <th>Req. Length (in)</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for check in result.checks %}
+            <tr class="{% if not check.passed %}check--fail{% endif %}">
+                <td class="check-name">
+                    {% if not check.passed %}
+                    <i class="bi bi-x-circle-fill" style="color:var(--fc-fail);margin-right:.3rem;font-size:.8rem;"></i>
+                    {% else %}
+                    <i class="bi bi-check-circle-fill" style="color:var(--fc-pass);margin-right:.3rem;font-size:.8rem;"></i>
+                    {% endif %}
+                    {{ check.name }}
+                </td>
+                <td class="mono {% if not check.passed %}check-ratio--fail{% endif %}">{{ check.demand|floatformat:2 }}</td>
+                <td class="mono">{{ check.capacity|floatformat:2 }}</td>
+                <td>
+                    <span class="check-ratio ratio-{{ check.ratio|floatformat:3|cut:'.' }}" data-ratio="{{ check.ratio }}">
+                        {{ check.ratio|floatformat:3 }}
+                    </span>
+                    <div class="ratio-bar-wrap" style="margin-top:4px;">
+                        <div class="ratio-bar" data-ratio="{{ check.ratio }}"></div>
+                    </div>
+                </td>
+                <td class="mono" style="color:var(--fc-text-muted);font-size:.78rem;">{{ check.governing_combo }}</td>
+                <td class="mono">
+                    {% if check.required_length is not None %}{{ check.required_length|floatformat:2 }}{% else %}&mdash;{% endif %}
+                </td>
+                <td>
+                    <span class="fc-badge fc-badge--{% if check.passed %}pass{% else %}fail{% endif %}">
+                        {% if check.passed %}OK{% else %}NG{% endif %}
+                    </span>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <div style="padding:.75rem 1.25rem;font-size:.7rem;color:var(--fc-text-xmuted);border-top:1px solid var(--fc-border);">
+        Bending: f<sub>b</sub> = M/S vs F'<sub>b</sub> = F<sub>b</sub> &times; C<sub>F</sub> &times; C<sub>r</sub> &times; C<sub>D</sub> &nbsp;&middot;&nbsp;
+        Shear: f<sub>v</sub> = 1.5V/A vs F'<sub>v</sub> = F<sub>v</sub> &times; C<sub>D</sub> &nbsp;&middot;&nbsp;
+        Deflection: 5wL&sup4;/384EI vs L/&Delta; &nbsp;&middot;&nbsp;
+        Bearing: R/(b &times; L<sub>b</sub>) vs F<sub>c&perp;</sub> &times; C<sub>b</sub> &nbsp;&middot;&nbsp;
+        Req. length solves R/(b &times; L<sub>b</sub>) = F<sub>c&perp;</sub> &times; C<sub>b</sub>(L<sub>b</sub>) for L<sub>b</sub>, min 1.5"
+    </div>
+</div>
+
+<script>
+(function() {
+    document.querySelectorAll('[data-ratio]').forEach(el => {
+        const r = parseFloat(el.dataset.ratio);
+        if (Number.isNaN(r)) return;
+        if (el.classList.contains('check-ratio') || el.tagName === 'SPAN') {
+            if (r > 1.0) el.classList.add('check-ratio--fail');
+            else if (r > 0.85) el.classList.add('check-ratio--warn');
+            else el.classList.add('check-ratio--pass');
+        }
+        if (el.classList.contains('ratio-bar')) {
+            el.style.width = Math.min(r * 100, 100) + '%';
+            if (r > 1.0) el.classList.add('ratio-bar--fail');
+            else if (r > 0.85) el.classList.add('ratio-bar--warn');
+            else el.classList.add('ratio-bar--pass');
+        }
+    });
+
+    function drawDiagram(svgId, points, supportPositions, supportLabels, stroke, fill, invert) {
+        const svg = document.getElementById(svgId);
+        if (!svg || !points.length) return;
+        const W = 520, H = 180;
+        const left = 46, right = 16, top = 12, bottom = 30;
+        const innerW = W - left - right;
+        const innerH = H - top - bottom;
+        // Deflection is downward-positive from the engine. invert=true plots
+        // it sagging DOWN (the real deformed shape) rather than arching up,
+        // matching BC Calc; axis labels below stay positive-down.
+        const yval = p => (invert ? -p.y : p.y);
+        const xs = points.map(p => p.x);
+        const ys = points.map(yval);
+        const minX = Math.min(...xs);
+        const maxX = Math.max(...xs);
+        const minY = Math.min(...ys, 0);
+        const maxY = Math.max(...ys, 0);
+        const rangeY = Math.max(maxY - minY, 1e-6);
+        const zeroY = top + ((maxY - 0) / rangeY) * innerH;
+        const scaleX = x => left + ((x - minX) / Math.max(maxX - minX, 1e-6)) * innerW;
+        const scaleY = y => top + ((maxY - y) / rangeY) * innerH;
+        const ns = 'http://www.w3.org/2000/svg';
+        const make = (tag, attrs) => {
+            const el = document.createElementNS(ns, tag);
+            Object.entries(attrs).forEach(([k, v]) => el.setAttribute(k, v));
+            return el;
+        };
+
+        svg.innerHTML = '';
+        svg.appendChild(make('rect', { x: 0, y: 0, width: W, height: H, fill: 'transparent' }));
+        svg.appendChild(make('line', { x1: left, y1: zeroY, x2: W - right, y2: zeroY, stroke: '#94a3b8', 'stroke-width': 1 }));
+        svg.appendChild(make('line', { x1: left, y1: top, x2: left, y2: H - bottom, stroke: '#cbd5e1', 'stroke-width': 1 }));
+        svg.appendChild(make('line', { x1: left, y1: H - bottom, x2: W - right, y2: H - bottom, stroke: '#cbd5e1', 'stroke-width': 1 }));
+
+        supportPositions.forEach((pos, index) => {
+            const x = scaleX(pos);
+            svg.appendChild(make('line', { x1: x, y1: top, x2: x, y2: H - bottom, stroke: '#e2e8f0', 'stroke-width': 1, 'stroke-dasharray': '3 4' }));
+            const label = make('text', { x, y: H - 12, fill: '#64748b', 'font-size': 9, 'text-anchor': 'middle', 'font-family': 'JetBrains Mono, monospace' });
+            label.textContent = supportLabels[index] || '';
+            svg.appendChild(label);
+        });
+
+        const path = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${scaleX(p.x).toFixed(2)} ${scaleY(yval(p)).toFixed(2)}`).join(' ');
+        const areaPath = `${path} L ${scaleX(points[points.length - 1].x).toFixed(2)} ${zeroY.toFixed(2)} L ${scaleX(points[0].x).toFixed(2)} ${zeroY.toFixed(2)} Z`;
+        svg.appendChild(make('path', { d: areaPath, fill, opacity: 0.24 }));
+        svg.appendChild(make('path', { d: path, fill: 'none', stroke, 'stroke-width': 2.2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
+
+        const yLabelTop = make('text', { x: 6, y: top + 10, fill: '#64748b', 'font-size': 10, 'font-family': 'JetBrains Mono, monospace' });
+        yLabelTop.textContent = (invert ? -maxY : maxY).toFixed(2);
+        svg.appendChild(yLabelTop);
+        const yLabelBot = make('text', { x: 6, y: H - bottom, fill: '#64748b', 'font-size': 10, 'font-family': 'JetBrains Mono, monospace' });
+        yLabelBot.textContent = (invert ? -minY : minY).toFixed(2);
+        svg.appendChild(yLabelBot);
+        const xLabelLeft = make('text', { x: left, y: H - 6, fill: '#64748b', 'font-size': 10, 'font-family': 'JetBrains Mono, monospace' });
+        xLabelLeft.textContent = minX.toFixed(1) + ' ft';
+        svg.appendChild(xLabelLeft);
+        const zeroLabel = make('text', { x: 10, y: zeroY - 4, fill: '#94a3b8', 'font-size': 9, 'font-family': 'JetBrains Mono, monospace' });
+        zeroLabel.textContent = '0';
+        svg.appendChild(zeroLabel);
+        const xLabelRight = make('text', { x: W - right - 42, y: H - 6, fill: '#64748b', 'font-size': 10, 'font-family': 'JetBrains Mono, monospace' });
+        xLabelRight.textContent = maxX.toFixed(1) + ' ft';
+        svg.appendChild(xLabelRight);
+    }
+
+    const supportPositions = [{% for pos in result.summary.support_positions %}{{ pos|default:0 }}{% if not forloop.last %}, {% endif %}{% endfor %}];
+    const supportLabels = [{% for label in result.summary.support_labels %}"{{ label }}"{% if not forloop.last %}, {% endif %}{% endfor %}];
+    drawDiagram('shearDiagramSvg', [{% for p in result.summary.shear_diagram.points %}{ x: {{ p.x|floatformat:6 }}, y: {{ p.y|floatformat:6 }} }{% if not forloop.last %}, {% endif %}{% endfor %}], supportPositions, supportLabels, '#dc2626', '#fca5a5');
+    drawDiagram('momentDiagramSvg', [{% for p in result.summary.moment_diagram.points %}{ x: {{ p.x|floatformat:6 }}, y: {{ p.y|floatformat:6 }} }{% if not forloop.last %}, {% endif %}{% endfor %}], supportPositions, supportLabels, '#2563eb', '#93c5fd');
+    drawDiagram('deflectionLiveDiagramSvg', [{% for p in result.summary.deflection_live_diagram.points %}{ x: {{ p.x|floatformat:6 }}, y: {{ p.y|floatformat:6 }} }{% if not forloop.last %}, {% endif %}{% endfor %}], supportPositions, supportLabels, '#16a34a', '#86efac', true);
+    drawDiagram('deflectionTotalDiagramSvg', [{% for p in result.summary.deflection_total_diagram.points %}{ x: {{ p.x|floatformat:6 }}, y: {{ p.y|floatformat:6 }} }{% if not forloop.last %}, {% endif %}{% endfor %}], supportPositions, supportLabels, '#7c3aed', '#c4b5fd', true);
+})();
+</script>
+{% endif %}

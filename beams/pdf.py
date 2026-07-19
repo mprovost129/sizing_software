@@ -1,0 +1,571 @@
+"""PDF calculation-package export for a saved beam design.
+
+Mirrors the same content as the HTML result panel and CSV export (given
+inputs, section properties, adjustment factors, load combinations, and
+design checks with required bearing length) in a printable format, per
+the project's roadmap: "Reports: calculation packages... HTML templates
+with PDF generation."
+
+Built with reportlab (pure Python, no native system dependencies) rather
+than an HTML-to-PDF renderer like WeasyPrint, which needs GTK/Pango/Cairo
+system libraries that are unreliable to install on Windows.
+"""
+import io
+from xml.sax.saxutils import escape
+
+from reportlab.graphics.shapes import Drawing, Line, PolyLine, Rect, String
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import inch
+from reportlab.platypus import (
+    PageBreak,
+    Paragraph,
+    SimpleDocTemplate,
+    Spacer,
+    Table,
+    TableStyle,
+)
+
+from .load_inputs import entered_uniform_loads_to_plf
+
+PASS_COLOR = colors.HexColor("#16a34a")
+FAIL_COLOR = colors.HexColor("#dc2626")
+MUTED_COLOR = colors.HexColor("#6b7280")
+HEADER_BG = colors.HexColor("#f3f4f6")
+NAVY = colors.HexColor("#0f172a")
+BLUE = colors.HexColor("#1d4ed8")
+SLATE = colors.HexColor("#475569")
+GRID = colors.HexColor("#d1d5db")
+
+_TABLE_HEADER_STYLE = [
+    ("BACKGROUND", (0, 0), (-1, 0), HEADER_BG),
+    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+    ("FONTSIZE", (0, 0), (-1, -1), 8),
+    ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d1d5db")),
+    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+    ("TOPPADDING", (0, 0), (-1, -1), 4),
+    ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+]
+
+
+def _table(data, col_widths=None):
+    table = Table(data, colWidths=col_widths, hAlign="LEFT")
+    table.setStyle(TableStyle(_TABLE_HEADER_STYLE))
+    return table
+
+
+def _status_badge(text, passed, styles):
+    bg = "#dcfce7" if passed else "#fee2e2"
+    fg = "#166534" if passed else "#b91c1c"
+    style = ParagraphStyle(
+        "StatusBadge",
+        parent=styles["Normal"],
+        fontName="Helvetica-Bold",
+        fontSize=9,
+        textColor=colors.HexColor(fg),
+        backColor=colors.HexColor(bg),
+        borderPadding=(4, 6, 4, 6),
+        leading=12,
+    )
+    return Paragraph(text, style)
+
+
+def _support_schedule(design):
+    return [
+        (row["label"], row["bearing_length_in"], row["support_type"])
+        for row in design.support_schedule
+    ]
+
+
+def _project_lines(design):
+    if not design.project:
+        return []
+    lines = [f"<b>Project:</b> {design.project.name}"]
+    if design.project.project_number:
+        lines.append(f"<b>Project number:</b> {design.project.project_number}")
+    lines.append(f"<b>Project status:</b> {design.project.get_status_display()}")
+    if design.project.client_name:
+        lines.append(f"<b>Client:</b> {design.project.client_name}")
+    if design.project.site_address:
+        lines.append(f"<b>Site:</b> {design.project.site_address}")
+    if design.project.notes:
+        lines.append(f"<b>Project notes:</b> {design.project.notes}")
+    return lines
+
+
+def _point_load_rows(design):
+    rows = [["Load", "Location (ft from left end)", "Type"]]
+    if not design.point_loads:
+        rows.append(["None", "-", "-"])
+        return rows
+    for load in design.point_loads:
+        rows.append([
+            f"{load['p']:g} lb",
+            f"{load['location_ft']:g}",
+            str(load["load_type"]).replace("_", " ").title(),
+        ])
+    return rows
+
+
+def _distributed_load_rows(design):
+    rows = [["Intensity", "Analysis", "Start", "End", "Type"]]
+    if not design.distributed_loads:
+        rows.append(["None", "-", "-", "-", "-"])
+        return rows
+    for load in design.distributed_loads:
+        rows.append([
+            f"{load['w']:g} {load.get('basis', design.uniform_load_basis)}",
+            f"{load['w_plf']:g} plf",
+            f"{load['start_ft']:g} ft",
+            f"{load['end_ft']:g} ft",
+            str(load["load_type"]).replace("_", " ").title(),
+        ])
+    return rows
+
+
+def _diagram_drawing(series, summary, title, width=6.7 * inch, height=1.75 * inch):
+    drawing = Drawing(width, height)
+    pad_left = 42
+    pad_right = 14
+    pad_top = 24
+    pad_bottom = 28
+    plot_w = width - pad_left - pad_right
+    plot_h = height - pad_top - pad_bottom
+    axis_x1 = pad_left
+    axis_x2 = pad_left + plot_w
+    axis_y_top = pad_bottom + plot_h
+    axis_y_mid = pad_bottom + (plot_h / 2)
+    axis_y_bottom = pad_bottom
+
+    drawing.add(String(axis_x1, height - 12, title, fontName="Helvetica-Bold", fontSize=10, fillColor=NAVY))
+    if not series or not series.points:
+        drawing.add(String(axis_x1, axis_y_mid, "No analysis data available", fontName="Helvetica", fontSize=9, fillColor=MUTED_COLOR))
+        return drawing
+
+    total_length = max(summary.total_length, 1e-9)
+    max_abs_y = max(abs(point.y) for point in series.points) or 1.0
+
+    def sx(x):
+        return axis_x1 + (plot_w * (x / total_length))
+
+    def sy(y):
+        return axis_y_mid + (plot_h * 0.45 * (y / max_abs_y))
+
+    drawing.add(Rect(axis_x1, axis_y_bottom, plot_w, plot_h, strokeColor=GRID, fillColor=None, strokeWidth=0.6))
+    drawing.add(Line(axis_x1, axis_y_mid, axis_x2, axis_y_mid, strokeColor=SLATE, strokeWidth=0.8))
+
+    for support_x, label in zip(summary.support_positions, summary.support_labels):
+        x = sx(support_x)
+        drawing.add(Line(x, axis_y_bottom, x, axis_y_top, strokeColor=colors.HexColor("#cbd5e1"), strokeWidth=0.6))
+        drawing.add(String(x - 7, axis_y_bottom - 12, label, fontName="Helvetica-Bold", fontSize=7, fillColor=SLATE))
+
+    points = []
+    for point in series.points:
+        points.extend([sx(point.x), sy(point.y)])
+    drawing.add(PolyLine(points, strokeColor=BLUE, strokeWidth=1.3))
+
+    peak_x = sx(series.peak_x)
+    peak_y = sy(series.peak_y)
+    drawing.add(Line(peak_x, axis_y_mid, peak_x, peak_y, strokeColor=colors.HexColor("#93c5fd"), strokeWidth=0.8))
+    drawing.add(String(
+        axis_x1,
+        height - 24,
+        f"{series.governing_combo} - peak {series.peak_y:.3f} {series.unit} @ {series.peak_x:.2f} ft",
+        fontName="Helvetica",
+        fontSize=8,
+        fillColor=MUTED_COLOR,
+    ))
+    drawing.add(String(axis_x1 - 30, axis_y_top - 2, f"+{max_abs_y:.2f}", fontName="Helvetica", fontSize=7, fillColor=MUTED_COLOR))
+    drawing.add(String(axis_x1 - 30, axis_y_bottom - 2, f"-{max_abs_y:.2f}", fontName="Helvetica", fontSize=7, fillColor=MUTED_COLOR))
+    drawing.add(String(axis_x2 - 48, axis_y_bottom - 16, f"{total_length:.2f} ft", fontName="Helvetica", fontSize=7, fillColor=MUTED_COLOR))
+    return drawing
+
+
+def _beam_design_story(design, result, styles):
+    """Build the reusable member-report flowables for individual and project PDFs."""
+    story = []
+    section_label_style = ParagraphStyle(
+        "SectionLabel",
+        parent=styles["Heading3"],
+        textColor=NAVY,
+        spaceAfter=6,
+    )
+
+    title = design.name or f"Beam Design #{design.pk}"
+    story.append(Paragraph(title, styles["Title"]))
+    story.append(Paragraph(
+        f"{design.nominal_size} {result.summary.material_name} &middot; "
+        f"{design.get_member_type_display()} &middot; "
+        f"Revision {design.revision_number} &middot; Saved {design.created_at:%Y-%m-%d %H:%M}",
+        styles["Normal"],
+    ))
+    if design.revision_note:
+        story.append(Paragraph(f"<b>Revision note:</b> {escape(design.revision_note)}", styles["Normal"]))
+    for line in _project_lines(design):
+        story.append(Paragraph(line, styles["Normal"]))
+    story.append(Spacer(1, 10))
+
+    overall_text = "PASS" if result.passed else "FAIL"
+    summary_table = Table([
+        [
+            _status_badge(overall_text, result.passed, styles),
+            Paragraph(
+                f"<b>Governing check:</b> {result.governing.name}<br/>"
+                f"<b>Utilization:</b> {result.governing.ratio:.3f}",
+                styles["Normal"],
+            ),
+            Paragraph(
+                f"<b>Analysis length:</b> {result.summary.total_length:.2f} ft<br/>"
+                f"<b>Supports:</b> {len(result.summary.support_labels)}",
+                styles["Normal"],
+            ),
+        ]
+    ], colWidths=[1.0 * inch, 2.9 * inch, 2.3 * inch], hAlign="LEFT")
+    summary_table.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 0.6, GRID),
+        ("BACKGROUND", (0, 0), (-1, -1), colors.white),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+        ("TOPPADDING", (0, 0), (-1, -1), 8),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+    ]))
+    story.append(summary_table)
+    story.append(Spacer(1, 8))
+
+    # ---- Given -------------------------------------------------------
+    story.append(Paragraph("Design Basis", section_label_style))
+    given_lines = [
+        f"<b>Member:</b> {design.nominal_size} {result.summary.material_name}",
+        f"<b>Performance target:</b> {design.get_performance_profile_display()}",
+        f"<b>Subfloor / floor feel:</b> {design.get_subfloor_profile_display()}",
+    ]
+    if len(design.entered_spans) > 1:
+        given_lines.append(
+            f"<b>Spans as entered:</b> {' + '.join(f'{span:.2f} ft' for span in design.entered_spans)} "
+            f"({design.get_span_mode_display()})",
+        )
+        clear_labels = [
+            f"B{index}-B{index + 1} = {clear_span:.2f} ft clear"
+            for index, clear_span in enumerate(result.summary.span_segments, start=1)
+        ]
+        given_lines.append(f"<b>Analysis spans:</b> {' &middot; '.join(clear_labels)}")
+        given_lines.append(f"<b>Continuous total length:</b> {result.summary.total_length:.2f} ft")
+    elif design.span_mode != "inside":
+        given_lines.append(
+            f"<b>Span:</b> {design.span_ft:.2f} ft "
+            f"({design.get_span_mode_display()}) &rarr; "
+            f"{result.summary.span:.2f} ft clear (analysis span)",
+        )
+    else:
+        given_lines.append(f"<b>Span:</b> {result.summary.span:.2f} ft (clear)")
+    given_lines.append(
+        f"<b>Uniform load input:</b> {design.uniform_load_basis.upper()}"
+        + (f" @ {design.spacing_in:g}\" o.c." if design.uniform_load_basis == "psf" else "")
+        + (" (repetitive member)" if design.repetitive else ""),
+    )
+    entered_unit = design.uniform_load_basis
+    given_lines.append(
+        f"<b>Entered loads:</b> D = {design.dead_load_plf:g} {entered_unit}, "
+        f"L = {design.live_load_plf:g} {entered_unit}, "
+        f"S = {design.snow_load_plf:g} {entered_unit}, "
+        f"Lr = {design.roof_live_load_plf:g} {entered_unit}, "
+        f"W = {design.wind_load_plf:g} {entered_unit}",
+    )
+    given_lines.append(
+        f"<b>Deflection criteria:</b> back span L/{result.summary.deflection_limit_live:.0f} live/snow, "
+        f"L/{result.summary.deflection_limit_total:.0f} total",
+    )
+    if design.left_overhang_ft or design.right_overhang_ft:
+        given_lines.append(
+            f"<b>Cantilever criteria:</b> L/{result.summary.cantilever_deflection_limit_live:.0f} live/snow, "
+            f"L/{result.summary.cantilever_deflection_limit_total:.0f} total",
+        )
+    given_lines.append(
+        "<b>Bearing:</b> " + " &middot; ".join(
+            f"{label} {length:g}\" {support_type}"
+            for label, length, support_type in _support_schedule(design)
+        ),
+    )
+    if design.left_overhang_ft or design.right_overhang_ft:
+        given_lines.append(
+            f"<b>Overhang:</b> {design.left_overhang_ft:g} ft left, "
+            f"{design.right_overhang_ft:g} ft right "
+            f"(total length {result.summary.total_length:.2f} ft)",
+        )
+    for line in given_lines:
+        story.append(Paragraph(line, styles["Normal"]))
+    story.append(Spacer(1, 12))
+
+    story.append(Paragraph("Geometry & Support Schedule", section_label_style))
+    geometry_rows = [["Item", "Value"]]
+    geometry_rows.append(["Span basis", design.get_span_mode_display()])
+    geometry_rows.append(["Spans as entered", ", ".join(f"{span:.2f} ft" for span in design.entered_spans)])
+    geometry_rows.append(["Analysis spans", ", ".join(f"{span:.2f} ft" for span in result.summary.span_segments)])
+    geometry_rows.append(["Left overhang", f"{design.left_overhang_ft:g} ft"])
+    geometry_rows.append(["Right overhang", f"{design.right_overhang_ft:g} ft"])
+    geometry_rows.append(["Total member length", f"{result.summary.total_length:.2f} ft"])
+    story.append(_table(geometry_rows, col_widths=[2.0 * inch, 4.2 * inch]))
+    story.append(Spacer(1, 8))
+
+    support_rows = [["Support", "Bearing length (in)", "Support type"]]
+    for label, length_in, support_type in _support_schedule(design):
+        support_rows.append([label, f"{length_in:g}\"", support_type])
+    story.append(_table(support_rows, col_widths=[0.8 * inch, 1.3 * inch, 3.2 * inch]))
+    story.append(Spacer(1, 10))
+
+    # ---- Loads -------------------------------------------------------
+    story.append(Paragraph("Load Schedule", section_label_style))
+    entered_unit = design.uniform_load_basis
+    normalized = entered_uniform_loads_to_plf({
+        "uniform_load_basis": design.uniform_load_basis,
+        "spacing_in": design.spacing_in,
+        "dead_load_plf": design.dead_load_plf,
+        "live_load_plf": design.live_load_plf,
+        "snow_load_plf": design.snow_load_plf,
+        "roof_live_load_plf": design.roof_live_load_plf,
+        "wind_load_plf": design.wind_load_plf,
+    })
+    load_rows = [["Component", f"Entered ({entered_unit})", "Analysis (plf)", "CD"]]
+    load_rows.extend([
+        ["Dead", f"{design.dead_load_plf:g}", f"{normalized['dead']:.2f}", "0.90"],
+        ["Live", f"{design.live_load_plf:g}", f"{normalized['live']:.2f}", "1.00"],
+        ["Snow", f"{design.snow_load_plf:g}", f"{normalized['snow']:.2f}", "1.15"],
+        ["Roof live", f"{design.roof_live_load_plf:g}", f"{normalized['roof_live']:.2f}", "1.25"],
+        ["Wind", f"{design.wind_load_plf:g}", f"{normalized['wind']:.2f}", "1.60"],
+    ])
+    story.append(_table(load_rows, col_widths=[1.4 * inch, 1.3 * inch, 1.3 * inch, 0.7 * inch]))
+    story.append(Spacer(1, 8))
+    story.append(Paragraph("Additive Distributed Zones", styles["Normal"]))
+    story.append(_table(
+        _distributed_load_rows(design),
+        col_widths=[1.25 * inch, 1.05 * inch, 0.8 * inch, 0.8 * inch, 1.15 * inch],
+    ))
+    story.append(Spacer(1, 8))
+    story.append(Paragraph("Point Loads", styles["Normal"]))
+    story.append(_table(_point_load_rows(design), col_widths=[1.3 * inch, 1.8 * inch, 1.2 * inch]))
+    story.append(Spacer(1, 10))
+
+    # ---- Section properties -------------------------------------------
+    story.append(Paragraph("Section Properties & Adjustment Factors", section_label_style))
+    section = result.summary.section
+    story.append(_table([
+        ["A (in^2)", "I (in^4)", "S (in^3)"],
+        [f"{section.A:.3f}", f"{section.I:.3f}", f"{section.S:.3f}"],
+    ]))
+    story.append(Spacer(1, 10))
+
+    story.append(_table([
+        ["Fb base", "Fv base", "Fc perp base", "E"],
+        [
+            f"{result.summary.fb_base:.1f}", f"{result.summary.fv_base:.1f}",
+            f"{result.summary.fc_perp_base:.1f}", f"{result.summary.e:.0f}",
+        ],
+    ]))
+    story.append(Spacer(1, 8))
+    story.append(_table([
+        ["CF", "Cr", "Cb (left)", "Cb (right)", "Live limit", "Total limit"],
+        [
+            f"{result.summary.cf:.2f}", f"{result.summary.cr:.2f}",
+            f"{result.summary.cb_left:.2f}", f"{result.summary.cb_right:.2f}",
+            f"L/{result.summary.deflection_limit_live:.0f}",
+            f"L/{result.summary.deflection_limit_total:.0f}",
+        ],
+    ], col_widths=[0.7 * inch, 0.7 * inch, 0.8 * inch, 0.8 * inch, 0.9 * inch, 0.9 * inch]))
+    story.append(Spacer(1, 10))
+
+    # ---- Load combinations ---------------------------------------------
+    story.append(Paragraph("Load Combinations (NDS 2018 Table 2.3.2)", section_label_style))
+    combo_rows = [[
+        "Combo", "CD", *[f"{label} (lb)" for label in result.summary.support_labels], "Vmax (lb)", "V @ x (ft)", "Mmax (ft-lb)", "M @ x (ft)",
+    ]]
+    for combo in result.summary.combos:
+        combo_rows.append([
+            combo.name, f"{combo.cd:.2f}", *[f"{reaction:.0f}" for reaction in combo.reactions],
+            f"{combo.v_max:.0f}", f"{combo.v_max_x:.2f}", f"{combo.m_max:.0f}", f"{combo.m_max_x:.2f}",
+        ])
+    combo_col_widths = [0.8 * inch, 0.5 * inch]
+    combo_col_widths.extend([0.7 * inch] * len(result.summary.support_labels))
+    combo_col_widths.extend([0.8 * inch, 0.7 * inch, 1.0 * inch, 0.7 * inch])
+    story.append(_table(combo_rows, col_widths=combo_col_widths))
+    story.append(Spacer(1, 10))
+
+    # ---- Analysis diagrams --------------------------------------------
+    story.append(Paragraph("Analysis Diagrams", section_label_style))
+    story.append(_diagram_drawing(result.summary.shear_diagram, result.summary, "Shear"))
+    story.append(Spacer(1, 6))
+    story.append(_diagram_drawing(result.summary.moment_diagram, result.summary, "Moment"))
+    story.append(Spacer(1, 6))
+    story.append(_diagram_drawing(result.summary.deflection_live_diagram, result.summary, "Live / transient deflection"))
+    story.append(Spacer(1, 6))
+    story.append(_diagram_drawing(result.summary.deflection_total_diagram, result.summary, "Total-load deflection"))
+    story.append(Spacer(1, 10))
+
+    # ---- Design checks ---------------------------------------------
+    story.append(Paragraph("Design Checks", section_label_style))
+    check_name_style = styles["Normal"].clone("CheckName")
+    check_name_style.fontSize = 8
+    check_rows = [["Check", "Demand", "Capacity", "Ratio", "Combo", "Req. Length (in)", "Status"]]
+    row_colors = []
+    for check in result.checks:
+        required = f"{check.required_length:.2f}" if check.required_length is not None else "-"
+        status = "OK" if check.passed else "FAIL"
+        # Long labels (e.g. the net-uplift warning) need to wrap rather
+        # than overflow the column -- plain strings don't wrap in a
+        # reportlab Table cell, but a Paragraph does.
+        check_rows.append([
+            Paragraph(check.name, check_name_style), f"{check.demand:.2f}", f"{check.capacity:.2f}",
+            f"{check.ratio:.3f}", check.governing_combo, required, status,
+        ])
+        row_colors.append(FAIL_COLOR if not check.passed else colors.black)
+
+    checks_table = Table(
+        check_rows,
+        colWidths=[1.6 * inch, 0.7 * inch, 0.7 * inch, 0.6 * inch, 0.7 * inch, 0.9 * inch, 0.6 * inch],
+        hAlign="LEFT",
+    )
+    table_style = list(_TABLE_HEADER_STYLE)
+    for i, color in enumerate(row_colors, start=1):
+        if color is FAIL_COLOR:
+            table_style.append(("TEXTCOLOR", (0, i), (-1, i), FAIL_COLOR))
+    checks_table.setStyle(TableStyle(table_style))
+    story.append(checks_table)
+    story.append(Spacer(1, 12))
+
+    story.append(Paragraph(
+        "Bending: f_b = M/S vs F'_b = Fb &times; CF &times; Cr &times; CD &middot; "
+        "Shear: f_v = 1.5V/A vs F'_v = Fv &times; CD &middot; "
+        "Deflection: numeric beam-curvature integration vs L/&Delta; criteria over each checked span or cantilever tip &middot; "
+        "Bearing: R/(b &times; Lb) vs Fc&perp; &times; Cb, with required Lb solving that "
+        "equality (min 1.5\" in the current wood workflow)",
+        styles["Normal"],
+    ))
+    story.append(Spacer(1, 16))
+    story.append(Paragraph(
+        '<font color="#6b7280" size="8">Preliminary sizing only. Not a substitute '
+        "for licensed engineering review.</font>",
+        styles["Normal"],
+    ))
+
+    return story
+
+
+def _pdf_document(buffer, title):
+    return SimpleDocTemplate(
+        buffer,
+        pagesize=letter,
+        topMargin=0.6 * inch,
+        bottomMargin=0.6 * inch,
+        leftMargin=0.6 * inch,
+        rightMargin=0.6 * inch,
+        title=title,
+    )
+
+
+def _page_footer(canvas, doc):
+    canvas.saveState()
+    canvas.setFont("Helvetica", 7)
+    canvas.setFillColor(MUTED_COLOR)
+    canvas.drawString(0.6 * inch, 0.32 * inch, "FrameCalc preliminary calculation package")
+    canvas.drawRightString(7.9 * inch, 0.32 * inch, f"Page {doc.page}")
+    canvas.restoreState()
+
+
+def render_beam_design_pdf(design, result) -> bytes:
+    """Render one saved design and its computed result to PDF bytes."""
+    buffer = io.BytesIO()
+    doc = _pdf_document(buffer, design.name or f"Beam design #{design.pk}")
+    styles = getSampleStyleSheet()
+    doc.build(
+        _beam_design_story(design, result, styles),
+        onFirstPage=_page_footer,
+        onLaterPages=_page_footer,
+    )
+    return buffer.getvalue()
+
+
+def render_project_pdf(project, design_results, issue=None) -> bytes:
+    """Render a project cover sheet followed by every full member report."""
+    buffer = io.BytesIO()
+    package_label = issue.label if issue else "Current Calculation Package"
+    doc = _pdf_document(buffer, f"{project.name} - {package_label}")
+    styles = getSampleStyleSheet()
+    story = [
+        Spacer(1, 0.35 * inch),
+        Paragraph("FrameCalc", styles["Heading2"]),
+        Paragraph(escape(project.name), styles["Title"]),
+        Paragraph("Structural Member Calculation Package", styles["Heading2"]),
+        Paragraph(escape(package_label), styles["Heading3"]),
+        Spacer(1, 16),
+    ]
+
+    project_rows = [["Project Information", ""]]
+    project_rows.append(["Project number", escape(project.project_number) if project.project_number else "Not entered"])
+    project_rows.append(["Status", project.get_status_display()])
+    project_rows.append(["Client", escape(project.client_name) if project.client_name else "Not entered"])
+    project_rows.append(["Site address", escape(project.site_address) if project.site_address else "Not entered"])
+    project_rows.append(["Last updated", project.updated_at.strftime("%Y-%m-%d")])
+    project_rows.append(["Member designs", str(len(design_results))])
+    if issue:
+        project_rows.append(["Issue date", issue.created_at.strftime("%Y-%m-%d %H:%M")])
+        prepared_by = issue.created_by.email if issue.created_by else "Unknown"
+        project_rows.append(["Prepared by", escape(prepared_by)])
+    story.append(_table(project_rows, col_widths=[1.4 * inch, 4.8 * inch]))
+    story.append(Spacer(1, 14))
+
+    passing_count = sum(1 for _, result in design_results if result.passed)
+    failing_count = len(design_results) - passing_count
+    story.append(_table([
+        ["Package Status", "Passing", "Failing"],
+        ["COMPLETE" if design_results else "NO DESIGNS", str(passing_count), str(failing_count)],
+    ], col_widths=[2.1 * inch, 1.2 * inch, 1.2 * inch]))
+    story.append(Spacer(1, 14))
+
+    summary_rows = [["Member", "Rev.", "Type", "Section", "Spans (ft)", "Governing", "Ratio", "Status"]]
+    for design, result in design_results:
+        summary_rows.append([
+            Paragraph(escape(design.name or f"Design #{design.pk}"), styles["Normal"]),
+            f"R{design.revision_number}",
+            design.get_member_type_display(),
+            design.nominal_size,
+            design.span_display,
+            Paragraph(escape(result.governing.name), styles["Normal"]),
+            f"{result.governing.ratio:.3f}",
+            "PASS" if result.passed else "FAIL",
+        ])
+    if not design_results:
+        summary_rows.append(["No member designs saved", "-", "-", "-", "-", "-", "-", "-"])
+    story.append(_table(
+        summary_rows,
+        col_widths=[1.1 * inch, 0.35 * inch, 0.7 * inch, 0.55 * inch, 0.7 * inch, 1.05 * inch, 0.5 * inch, 0.5 * inch],
+    ))
+
+    if project.notes:
+        story.extend([
+            Spacer(1, 14),
+            Paragraph("Project Notes", styles["Heading3"]),
+            Paragraph(escape(project.notes).replace("\n", "<br/>"), styles["Normal"]),
+        ])
+    if issue and issue.notes:
+        story.extend([
+            Spacer(1, 14),
+            Paragraph("Issue Notes", styles["Heading3"]),
+            Paragraph(escape(issue.notes), styles["Normal"]),
+        ])
+
+    story.extend([
+        Spacer(1, 24),
+        Paragraph(
+            '<font color="#6b7280" size="8">Preliminary sizing only. This package is not a substitute '
+            "for licensed engineering review, construction documents, or connection design.</font>",
+            styles["Normal"],
+        ),
+    ])
+
+    for design, result in design_results:
+        story.append(PageBreak())
+        story.extend(_beam_design_story(design, result, styles))
+
+    doc.build(story, onFirstPage=_page_footer, onLaterPages=_page_footer)
+    return buffer.getvalue()

@@ -1,0 +1,147 @@
+{% extends 'base.html' %}
+
+{% block title %}All Sizes | FrameCalc{% endblock %}
+
+{% block content %}
+<div class="page-container">
+
+    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;">
+        <div>
+            <h1 class="page-title">Member Scan &mdash; All Sizes</h1>
+            <p class="page-subtitle">
+                {% if span_2 %}{{ span }} + {{ span_2 }} ft spans{% else %}{{ span }} ft span{% endif %} &middot;
+                {% if uniform_load_basis == 'psf' %}{{ spacing_in }} in o.c. &middot;{% endif %}
+                {% if dead %}D: {{ dead }} {{ uniform_load_basis }}{% endif %}
+                {% if live %} L: {{ live }} {{ uniform_load_basis }}{% endif %}
+                {% if snow %} S: {{ snow }} {{ uniform_load_basis }}{% endif %}
+                {% if roof_live %} Lr: {{ roof_live }} {{ uniform_load_basis }}{% endif %}
+                {% if wind %} W: {{ wind }} {{ uniform_load_basis }}{% endif %}
+                &middot; {{ member_type_label }}
+            </p>
+        </div>
+        <a href="{% url 'beams:design' %}" class="fc-btn fc-btn--secondary">
+            <i class="bi bi-arrow-left"></i> Back to Design
+        </a>
+    </div>
+
+    {% if economy_size %}
+    <div class="verdict-banner verdict-banner--pass" style="margin-bottom:1.25rem;">
+        <div>
+            <p class="verdict-title">
+                <i class="bi bi-check-circle-fill"></i>
+                Most Economical: {{ economy_size }} {{ material_label }}
+                {% if repetitive %} &mdash; Repetitive{% endif %}
+            </p>
+            <p class="verdict-sub">Smallest depth, least plies. Governing ratio: {{ economy_ratio|floatformat:3 }}</p>
+        </div>
+        <span class="fc-badge fc-badge--pass">RECOMMENDED</span>
+    </div>
+    {% else %}
+    <div class="verdict-banner verdict-banner--fail" style="margin-bottom:1.25rem;">
+        <div>
+            <p class="verdict-title"><i class="bi bi-x-circle-fill"></i> No passing size found</p>
+            <p class="verdict-sub">All {{ material_label }} sizes fail under these loads. Consider a stronger material or multiple plies.</p>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="fc-card">
+        <div class="fc-card-header">
+            <span class="fc-card-title"><i class="bi bi-table"></i> All {{ material_label }} Sizes</span>
+            <span style="font-size:0.72rem;color:var(--fc-text-muted);">Double-click any passing row to use that size</span>
+        </div>
+        <table class="scan-table">
+            <thead>
+                <tr>
+                    <th>Size</th>
+                    <th>Bending</th>
+                    <th>Shear</th>
+                    <th>Brg Left</th>
+                    <th>Brg Right</th>
+                    <th>Defl L</th>
+                    <th>Defl T</th>
+                    <th>Governing</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in scan_rows %}
+                <tr class="scan-row--{% if row.passed %}pass{% else %}fail{% endif %} {% if row.nominal == economy_size %}scan-row--economy{% endif %}"
+                    ondblclick="{% if row.passed %}window.location='{% url 'beams:design' %}?size={{ row.nominal }}'{% endif %}"
+                    style="{% if row.passed %}cursor:pointer;{% endif %}">
+                    <td>
+                        <span class="scan-size">{{ row.nominal }}</span>
+                        {% if row.nominal == economy_size %}
+                        <span class="fc-badge fc-badge--pass" style="margin-left:.5rem;font-size:.65rem;">Best</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="check-ratio
+                            {% if row.result.bending.ratio > 1.0 %}check-ratio--fail
+                            {% elif row.result.bending.ratio > 0.85 %}check-ratio--warn
+                            {% else %}check-ratio--pass{% endif %}">
+                            {{ row.result.bending.ratio|floatformat:3 }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="check-ratio
+                            {% if row.result.shear.ratio > 1.0 %}check-ratio--fail
+                            {% elif row.result.shear.ratio > 0.85 %}check-ratio--warn
+                            {% else %}check-ratio--pass{% endif %}">
+                            {{ row.result.shear.ratio|floatformat:3 }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="check-ratio
+                            {% if row.result.bearing_left.ratio > 1.0 %}check-ratio--fail
+                            {% elif row.result.bearing_left.ratio > 0.85 %}check-ratio--warn
+                            {% else %}check-ratio--pass{% endif %}">
+                            {{ row.result.bearing_left.ratio|floatformat:3 }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="check-ratio
+                            {% if row.result.bearing_right.ratio > 1.0 %}check-ratio--fail
+                            {% elif row.result.bearing_right.ratio > 0.85 %}check-ratio--warn
+                            {% else %}check-ratio--pass{% endif %}">
+                            {{ row.result.bearing_right.ratio|floatformat:3 }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="check-ratio
+                            {% if row.result.deflection_live.ratio > 1.0 %}check-ratio--fail
+                            {% elif row.result.deflection_live.ratio > 0.85 %}check-ratio--warn
+                            {% else %}check-ratio--pass{% endif %}">
+                            {{ row.result.deflection_live.ratio|floatformat:3 }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="check-ratio
+                            {% if row.result.deflection_total.ratio > 1.0 %}check-ratio--fail
+                            {% elif row.result.deflection_total.ratio > 0.85 %}check-ratio--warn
+                            {% else %}check-ratio--pass{% endif %}">
+                            {{ row.result.deflection_total.ratio|floatformat:3 }}
+                        </span>
+                    </td>
+                    <td class="mono" style="color:var(--fc-text-muted);font-size:.78rem;">
+                        {{ row.result.governing.name }}<br>
+                        <span class="check-ratio
+                            {% if row.result.governing.ratio > 1.0 %}check-ratio--fail
+                            {% elif row.result.governing.ratio > 0.85 %}check-ratio--warn
+                            {% else %}check-ratio--pass{% endif %}">
+                            {{ row.result.governing.ratio|floatformat:3 }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="fc-badge fc-badge--{% if row.passed %}pass{% else %}fail{% endif %}">
+                            {% if row.passed %}OK{% else %}NG{% endif %}
+                        </span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+</div>
+{% endblock %}

@@ -1,0 +1,125 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ project.name }} | FrameCalc{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <div class="page-header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;">
+        <div>
+            <h1 class="page-title">{{ project.name }}</h1>
+            <p class="page-subtitle">
+                {% if project.project_number %}{{ project.project_number }} &middot; {% endif %}
+                {% if project.client_name %}{{ project.client_name }}{% endif %}
+                {% if project.client_name and project.site_address %} &middot; {% endif %}
+                {% if project.site_address %}{{ project.site_address }}{% endif %}
+                {% if not project.client_name and not project.site_address %}Project workspace{% endif %}
+            </p>
+        </div>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+            <a href="{% url 'beams:project_export_pdf' project.pk %}" class="fc-btn fc-btn--secondary"><i class="bi bi-file-earmark-pdf"></i> Calculation Package</a>
+            <a href="{% url 'beams:project_export_csv' project.pk %}" class="fc-btn fc-btn--secondary"><i class="bi bi-download"></i> Export CSV</a>
+            <a href="{% url 'beams:project_update' project.pk %}" class="fc-btn fc-btn--secondary"><i class="bi bi-pencil"></i> Edit Project</a>
+            <a href="{% url 'beams:design' %}?project={{ project.pk }}" class="fc-btn fc-btn--primary"><i class="bi bi-plus-lg"></i> New Design</a>
+        </div>
+    </div>
+
+    <div class="stat-row" style="margin-bottom:1rem;">
+        <div class="stat-pill"><div class="stat-label">Designs</div><div class="stat-value">{{ rows|length }}</div></div>
+        <div class="stat-pill"><div class="stat-label">Status</div><div class="stat-value" style="font-size:.85rem;">{{ project.get_status_display }}</div></div>
+        <div class="stat-pill"><div class="stat-label">Passing</div><div class="stat-value">{{ passing_count }}</div></div>
+        <div class="stat-pill"><div class="stat-label">Failing</div><div class="stat-value">{{ failing_count }}</div></div>
+        <div class="stat-pill"><div class="stat-label">Updated</div><div class="stat-value" style="font-size:.85rem;">{{ project.updated_at|date:"M j, Y" }}</div></div>
+    </div>
+
+    {% if project.notes %}
+    <div class="fc-card" style="margin-bottom:1rem;">
+        <div class="fc-card-header"><span class="fc-card-title"><i class="bi bi-journal-text"></i> Project Notes</span></div>
+        <div class="fc-card-body" style="white-space:pre-wrap;font-size:.82rem;color:var(--fc-text-muted);">{{ project.notes }}</div>
+    </div>
+    {% endif %}
+
+    {% if rows %}
+    <div class="fc-card" style="margin-bottom:1rem;">
+        <div class="fc-card-header">
+            <span class="fc-card-title"><i class="bi bi-send-check"></i> Create Issue Package</span>
+            <span style="font-size:.72rem;color:var(--fc-text-muted);">Snapshot exact member revisions for a reproducible issue</span>
+        </div>
+        <form method="post" action="{% url 'beams:project_issue_create' project.pk %}" class="fc-card-body">
+            {% csrf_token %}
+            <div class="input-grid--two">
+                <div class="fc-form-group">
+                    <label class="fc-label" for="issueLabel">Issue label</label>
+                    <input id="issueLabel" name="label" maxlength="80" required class="fc-input" placeholder="e.g. Permit Set, Rev 1, Preliminary">
+                </div>
+                <div class="fc-form-group">
+                    <label class="fc-label" for="issueNotes">Issue note</label>
+                    <input id="issueNotes" name="notes" maxlength="240" class="fc-input" placeholder="Optional transmittal or scope note">
+                </div>
+            </div>
+            <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin:.25rem 0 1rem;">
+                {% for design, result in rows %}
+                <label class="fc-check-group" style="padding:.55rem .7rem;border:1px solid var(--fc-border);border-radius:var(--fc-radius);background:var(--fc-gray-50);">
+                    <input type="checkbox" name="design_ids" value="{{ design.pk }}" checked>
+                    <span>{{ design.name|default:"Unnamed design" }} &middot; R{{ design.revision_number }} &middot; {{ design.nominal_size }}</span>
+                </label>
+                {% endfor %}
+            </div>
+            <button type="submit" class="fc-btn fc-btn--primary"><i class="bi bi-file-earmark-lock"></i> Create &amp; Download Issue</button>
+        </form>
+    </div>
+    {% endif %}
+
+    {% if issues %}
+    <div class="fc-card" style="margin-bottom:1rem;">
+        <div class="fc-card-header">
+            <span class="fc-card-title"><i class="bi bi-clock-history"></i> Issue History</span>
+            <span style="font-size:.72rem;color:var(--fc-text-muted);">{{ issues|length }} issue{{ issues|length|pluralize }}</span>
+        </div>
+        <div class="fc-card-body" style="display:grid;gap:.6rem;">
+            {% for issue in issues %}
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.65rem .75rem;border:1px solid var(--fc-border);border-radius:var(--fc-radius);">
+                <div>
+                    <strong style="font-size:.82rem;color:var(--fc-gray-900);">{{ issue.label }}</strong>
+                    <div style="font-size:.72rem;color:var(--fc-text-muted);">
+                        {{ issue.created_at|date:"M j, Y g:i A" }} &middot; {{ issue.members.count }} member{{ issue.members.count|pluralize }}
+                        {% if issue.created_by %} &middot; {{ issue.created_by.email }}{% endif %}
+                    </div>
+                    {% if issue.notes %}<div style="font-size:.75rem;color:var(--fc-text-muted);margin-top:.2rem;">{{ issue.notes }}</div>{% endif %}
+                </div>
+                <a href="{% url 'beams:project_issue_pdf' project.pk issue.pk %}" class="fc-btn fc-btn--secondary"><i class="bi bi-download"></i> PDF</a>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="fc-card">
+        <div class="fc-card-header">
+            <span class="fc-card-title"><i class="bi bi-bezier2"></i> Member Designs</span>
+            <span style="font-size:.72rem;color:var(--fc-text-muted);">{{ rows|length }} design{{ rows|length|pluralize }}</span>
+        </div>
+        <div class="fc-card-body">
+            {% if rows %}
+            <div class="designs-grid">
+                {% for design, result in rows %}
+                <a href="{% url 'beams:detail' design.pk %}" class="design-card" style="border-left:3px solid {% if result.passed %}var(--fc-pass-border){% else %}var(--fc-fail-border){% endif %};">
+                    <div class="design-card-top">
+                        <div><p class="design-card-name">{{ design.name|default:"Unnamed design" }}</p><p class="design-card-meta">R{{ design.revision_number }} &middot; {{ design.created_at|date:"M j, Y" }}</p></div>
+                        <span class="fc-badge fc-badge--{% if result.passed %}pass{% else %}fail{% endif %}">{% if result.passed %}PASS{% else %}FAIL{% endif %}</span>
+                    </div>
+                    <div class="design-card-props">
+                        <span class="design-prop"><strong>{{ design.nominal_size }}</strong> {{ design.get_material_display }}</span>
+                        <span class="design-prop"><strong>{{ design.span_display }} ft</strong></span>
+                        <span class="design-prop">{{ design.get_member_type_display }}</span>
+                        <span class="design-prop">Gov: <strong>{{ result.governing.ratio|floatformat:3 }}</strong></span>
+                    </div>
+                </a>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty-state"><i class="bi bi-folder-plus empty-state-icon"></i><h3>No designs in this project</h3><p>Create a design and this project will already be selected.</p><a href="{% url 'beams:design' %}?project={{ project.pk }}" class="fc-btn fc-btn--primary"><i class="bi bi-plus-lg"></i> New Design</a></div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

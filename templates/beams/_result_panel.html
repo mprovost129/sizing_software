@@ -1,0 +1,466 @@
+{% load static %}
+
+{% if result %}
+<!-- Verdict banner -->
+<div class="verdict-banner verdict-banner--{% if result.passed %}pass{% else %}fail{% endif %}">
+    <div>
+        <p class="verdict-title">
+            {% if result.passed %}
+            <i class="bi bi-check-circle-fill"></i> PASS &mdash; {{ result.summary.section.nominal }} {{ result.summary.material_name }}
+            {% else %}
+            <i class="bi bi-x-circle-fill"></i> FAIL &mdash; {{ result.summary.section.nominal }} {{ result.summary.material_name }}
+            {% endif %}
+        </p>
+        <p class="verdict-sub">
+            Governing: {{ result.governing.name }} &mdash; ratio {{ result.governing.ratio|floatformat:3 }}
+            &middot;
+            {% if result.summary.support_positions|length > 2 %}
+                {{ result.summary.span_segments|length }} spans
+                &middot; {{ result.summary.total_length|floatformat:2 }} ft total
+                &middot;
+                {% for seg in result.summary.span_segments %}
+                    B{{ forloop.counter }}-B{{ forloop.counter|add:1 }} {{ seg|floatformat:2 }} ft{% if not forloop.last %}, {% endif %}
+                {% endfor %}
+            {% elif result.summary.span_mode == 'out_to_out' %}
+                Span {{ result.summary.given_span|floatformat:2 }} ft (out to out)
+                &rarr; {{ result.summary.span|floatformat:2 }} ft clear (analysis span)
+            {% elif result.summary.span_mode == 'center_to_center' %}
+                Span {{ result.summary.given_span|floatformat:2 }} ft (center to center)
+                &rarr; {{ result.summary.span|floatformat:2 }} ft clear (analysis span)
+            {% else %}
+                Span {{ result.summary.span|floatformat:2 }} ft (clear)
+            {% endif %}
+            {% if result.summary.left_overhang or result.summary.right_overhang %}
+                &middot; Overhang: {{ result.summary.left_overhang|floatformat:2 }} ft left,
+                {{ result.summary.right_overhang|floatformat:2 }} ft right
+                (total length {{ result.summary.total_length|floatformat:2 }} ft)
+            {% endif %}
+            &middot; F'b = {{ result.summary.fb_base }} &times; CF({{ result.summary.cf }}) &times; Cr({{ result.summary.cr }}) psi
+        </p>
+    </div>
+    <span class="fc-badge fc-badge--{% if result.passed %}pass{% else %}fail{% endif %}">
+        {% if result.passed %}OK{% else %}NG{% endif %}
+    </span>
+</div>
+
+<!-- Stat pills -->
+<div class="stat-row">
+    <div class="stat-pill">
+        <div class="stat-label">Section</div>
+        <div class="stat-value" style="font-size:.9rem;">{{ result.summary.section.nominal }}</div>
+    </div>
+    <div class="stat-pill">
+        <div class="stat-label">A (in&sup2;)</div>
+        <div class="stat-value">{{ result.summary.section.A|floatformat:2 }}</div>
+    </div>
+    <div class="stat-pill">
+        <div class="stat-label">S (in&sup3;)</div>
+        <div class="stat-value">{{ result.summary.section.S|floatformat:2 }}</div>
+    </div>
+    <div class="stat-pill">
+        <div class="stat-label">I (in&sup4;)</div>
+        <div class="stat-value">{{ result.summary.section.I|floatformat:2 }}</div>
+    </div>
+    <div class="stat-pill">
+        <div class="stat-label">C<sub>F</sub></div>
+        <div class="stat-value">{{ result.summary.cf|floatformat:2 }}</div>
+    </div>
+    <div class="stat-pill">
+        <div class="stat-label">C<sub>r</sub></div>
+        <div class="stat-value">{{ result.summary.cr|floatformat:2 }}</div>
+    </div>
+    <div class="stat-pill">
+        <div class="stat-label">Back Span Defl.</div>
+        <div class="stat-value">L/{{ result.summary.deflection_limit_live|floatformat:0 }} / L/{{ result.summary.deflection_limit_total|floatformat:0 }}</div>
+    </div>
+    {% if result.summary.left_overhang or result.summary.right_overhang %}
+    <div class="stat-pill">
+        <div class="stat-label">Cant. Defl.</div>
+        <div class="stat-value">L/{{ result.summary.cantilever_deflection_limit_live|floatformat:0 }} / L/{{ result.summary.cantilever_deflection_limit_total|floatformat:0 }}</div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Beam diagram -->
+<div class="fc-card" style="margin-bottom:1.25rem;">
+    <div class="fc-card-header">
+        <span class="fc-card-title"><i class="bi bi-diagram-2"></i> Loading Diagram</span>
+        <span style="font-size:0.72rem;color:var(--fc-text-muted);">
+            {% if result.summary.support_positions|length > 2 %}
+                {{ result.summary.total_length|floatformat:2 }} ft total length &middot;
+                {{ result.summary.span_segments|length }} continuous spans
+            {% elif result.summary.left_overhang or result.summary.right_overhang %}
+                {{ result.summary.total_length|floatformat:2 }} ft total length &middot;
+                {{ result.summary.span|floatformat:2 }} ft back span
+            {% else %}
+                {{ result.summary.span|floatformat:2 }} ft span
+            {% endif %}
+            &middot; {{ result.summary.section.nominal }} {{ result.summary.material_name }}
+        </span>
+    </div>
+    <div class="fc-card-body" style="padding:1.5rem 2rem;">
+        <div class="beam-diagram-wrap">
+            <svg id="beamDiagramSvg" viewBox="0 0 600 170" height="170"></svg>
+        </div>
+    </div>
+</div>
+
+<!-- Load combinations summary -->
+<div class="fc-card" style="margin-bottom:1.25rem;">
+    <div class="fc-card-header">
+        <span class="fc-card-title"><i class="bi bi-layers"></i> Load Combinations</span>
+        <span style="font-size:0.72rem;color:var(--fc-text-muted);">NDS 2018 Table 2.3.2</span>
+    </div>
+    <table class="checks-table">
+        <thead>
+            <tr>
+                <th>Combo</th>
+                <th>C<sub>D</sub></th>
+                {% for label in result.summary.support_labels %}
+                <th>{{ label }} (lb)</th>
+                {% endfor %}
+                <th>V<sub>max</sub> (lb)</th>
+                <th>M<sub>max</sub> (ft-lb)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for combo in result.summary.combos %}
+            <tr>
+                <td class="mono" style="font-weight:500;">{{ combo.name }}</td>
+                <td class="mono">{{ combo.cd|floatformat:2 }}</td>
+                {% for reaction in combo.reactions %}
+                <td class="mono">{{ reaction|floatformat:0 }}</td>
+                {% endfor %}
+                <td class="mono">{{ combo.v_max|floatformat:0 }}</td>
+                <td class="mono">{{ combo.m_max|floatformat:0 }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Check results table -->
+<div class="fc-card">
+    <div class="fc-card-header">
+        <span class="fc-card-title"><i class="bi bi-clipboard-check"></i> Design Checks</span>
+        <span style="font-size:0.72rem;color:var(--fc-text-muted);">NDS 2018 &middot; IRC R301.7</span>
+    </div>
+    <table class="checks-table">
+        <thead>
+            <tr>
+                <th>Check</th>
+                <th>Demand</th>
+                <th>Capacity</th>
+                <th>Ratio</th>
+                <th>Combo</th>
+                <th>Req. Length (in)</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for check in result.checks %}
+            <tr class="{% if not check.passed %}check--fail{% endif %}">
+                <td class="check-name">
+                    {% if not check.passed %}
+                    <i class="bi bi-x-circle-fill" style="color:var(--fc-fail);margin-right:.3rem;font-size:.8rem;"></i>
+                    {% else %}
+                    <i class="bi bi-check-circle-fill" style="color:var(--fc-pass);margin-right:.3rem;font-size:.8rem;"></i>
+                    {% endif %}
+                    {{ check.name }}
+                </td>
+                <td class="mono {% if not check.passed %}check-ratio--fail{% endif %}">{{ check.demand|floatformat:2 }}</td>
+                <td class="mono">{{ check.capacity|floatformat:2 }}</td>
+                <td>
+                    <span class="check-ratio ratio-{{ check.ratio|floatformat:3|cut:'.' }}"
+                          data-ratio="{{ check.ratio }}">
+                        {{ check.ratio|floatformat:3 }}
+                    </span>
+                    <div class="ratio-bar-wrap" style="margin-top:4px;">
+                        <div class="ratio-bar" data-ratio="{{ check.ratio }}"></div>
+                    </div>
+                </td>
+                <td class="mono" style="color:var(--fc-text-muted);font-size:.78rem;">{{ check.governing_combo }}</td>
+                <td class="mono">
+                    {% if check.required_length is not None %}{{ check.required_length|floatformat:2 }}{% else %}&mdash;{% endif %}
+                </td>
+                <td>
+                    <span class="fc-badge fc-badge--{% if check.passed %}pass{% else %}fail{% endif %}">
+                        {% if check.passed %}OK{% else %}NG{% endif %}
+                    </span>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <div style="padding:.75rem 1.25rem;font-size:.7rem;color:var(--fc-text-xmuted);border-top:1px solid var(--fc-border);">
+        Bending: f<sub>b</sub> = M/S vs F'<sub>b</sub> = F<sub>b</sub> &times; C<sub>F</sub> &times; C<sub>r</sub> &times; C<sub>D</sub> &nbsp;&middot;&nbsp;
+        Shear: f<sub>v</sub> = 1.5V/A vs F'<sub>v</sub> = F<sub>v</sub> &times; C<sub>D</sub> &nbsp;&middot;&nbsp;
+        Deflection: 5wL&sup4;/384EI vs L/&Delta; &nbsp;&middot;&nbsp;
+        Bearing: R/(b &times; L<sub>b</sub>) vs F<sub>c&perp;</sub> &times; C<sub>b</sub> &nbsp;&middot;&nbsp;
+        Req. length solves R/(b &times; L<sub>b</sub>) = F<sub>c&perp;</sub> &times; C<sub>b</sub>(L<sub>b</sub>) for L<sub>b</sub>, min 1.5"
+    </div>
+</div>
+
+{{ result.summary.load_zones|json_script:"beam-load-zones" }}
+{{ result.summary.point_loads|json_script:"beam-point-loads" }}
+<script>
+(function() {
+    // ---- Ratio bar coloring (JS, not Django template filter math) ----
+    document.querySelectorAll('[data-ratio]').forEach(el => {
+        const r = parseFloat(el.dataset.ratio);
+        if (el.classList.contains('check-ratio') || el.tagName === 'SPAN') {
+            if (r > 1.0)       el.classList.add('check-ratio--fail');
+            else if (r > 0.85) el.classList.add('check-ratio--warn');
+            else               el.classList.add('check-ratio--pass');
+        }
+        if (el.classList.contains('ratio-bar')) {
+            el.style.width = Math.min(r * 100, 100) + '%';
+            if (r > 1.0)       el.classList.add('ratio-bar--fail');
+            else if (r > 0.85) el.classList.add('ratio-bar--warn');
+            else               el.classList.add('ratio-bar--pass');
+        }
+    });
+
+    // ---- Beam diagram ----
+    const svg = document.getElementById('beamDiagramSvg');
+    if (!svg) return;
+
+    const W = 600, H = 170;
+    const margin = 75;
+    const beamY = 100;
+    const beamH = 20;
+    const beamX1 = margin;
+    const beamX2 = W - margin;
+    const beamLen = beamX2 - beamX1;
+    const span = Number({{ result.summary.span|default:0 }});
+    const leftOverhang = Number({{ result.summary.left_overhang|default:0 }});
+    const rightOverhang = Number({{ result.summary.right_overhang|default:0 }});
+    const totalLength = Number({{ result.summary.total_length|default:0 }}) || span;
+    const supportPositions = [{% for pos in result.summary.support_positions %}Number({{ pos|default:0 }}){% if not forloop.last %}, {% endif %}{% endfor %}];
+    const supportXs = supportPositions.map(pos => beamX1 + (beamLen * pos / totalLength));
+    const supportLabels = [{% for label in result.summary.support_labels %}"{{ label }}"{% if not forloop.last %}, {% endif %}{% endfor %}];
+    const supportTypes = [{% for support_type in support_type_sequence %}"{{ support_type|default:'wall_plate' }}"{% if not forloop.last %}, {% endif %}{% endfor %}];
+
+    function el(tag, attrs, text) {
+        const e = document.createElementNS('http://www.w3.org/2000/svg', tag);
+        for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+        if (text !== undefined) e.textContent = text;
+        return e;
+    }
+
+    function txt(x, y, text, attrs) {
+        return el('text', { x, y, 'font-family': 'Inter, system-ui, sans-serif', 'font-size': 10, ...attrs }, text);
+    }
+
+    function arrowDown(x, y1, y2, color) {
+        const g = el('g', {});
+        g.appendChild(el('line', { x1: x, y1, x2: x, y2: y2 - 6, stroke: color, 'stroke-width': 1.5 }));
+        g.appendChild(el('polygon', {
+            points: `${x},${y2} ${x - 5},${y2 - 8} ${x + 5},${y2 - 8}`,
+            fill: color
+        }));
+        return g;
+    }
+
+    function arrowUp(x, y1, y2, color) {
+        // reaction arrow pointing up
+        const g = el('g', {});
+        g.appendChild(el('line', { x1: x, y1: y1 + 6, x2: x, y2: y2, stroke: color, 'stroke-width': 1.5 }));
+        g.appendChild(el('polygon', {
+            points: `${x},${y1} ${x - 5},${y1 + 8} ${x + 5},${y1 + 8}`,
+            fill: color
+        }));
+        return g;
+    }
+
+    function drawDimension(x1, x2, y, label, color = '#9ca3af') {
+        const g = el('g', {});
+        g.appendChild(el('line', { x1, y1: y, x2, y2: y, stroke: color, 'stroke-width': 1 }));
+        g.appendChild(el('polygon', { points: `${x1},${y} ${x1 + 8},${y - 3} ${x1 + 8},${y + 3}`, fill: color }));
+        g.appendChild(el('polygon', { points: `${x2},${y} ${x2 - 8},${y - 3} ${x2 - 8},${y + 3}`, fill: color }));
+        g.appendChild(txt((x1 + x2) / 2, y + 12, label, {
+            'text-anchor': 'middle',
+            fill: '#6b7280',
+            'font-family': 'JetBrains Mono, monospace',
+            'font-size': 10
+        }));
+        return g;
+    }
+
+    // Grid background already handled by CSS .beam-diagram-wrap::before
+
+    // ---- beam body (wood grain look) ----
+    const beamGrad = el('linearGradient', { id: 'beamGrad', x1: '0', y1: '0', x2: '0', y2: '1' });
+    beamGrad.appendChild(el('stop', { offset: '0%', 'stop-color': '#2a4d7a' }));
+    beamGrad.appendChild(el('stop', { offset: '50%', 'stop-color': '#1e3a6b' }));
+    beamGrad.appendChild(el('stop', { offset: '100%', 'stop-color': '#152c52' }));
+    const defs = el('defs', {});
+    defs.appendChild(beamGrad);
+    svg.appendChild(defs);
+
+    svg.appendChild(el('rect', {
+        x: beamX1, y: beamY - beamH / 2,
+        width: beamLen, height: beamH,
+        fill: 'url(#beamGrad)', rx: 2,
+        stroke: '#0f1f3d', 'stroke-width': 1
+    }));
+
+    // Section depth indicator on left
+    svg.appendChild(el('line', { x1: beamX1 - 8, y1: beamY - beamH / 2, x2: beamX1 - 8, y2: beamY + beamH / 2, stroke: '#9ca3af', 'stroke-width': 1 }));
+    svg.appendChild(el('line', { x1: beamX1 - 12, y1: beamY - beamH / 2, x2: beamX1 - 4, y2: beamY - beamH / 2, stroke: '#9ca3af', 'stroke-width': 1 }));
+    svg.appendChild(el('line', { x1: beamX1 - 12, y1: beamY + beamH / 2, x2: beamX1 - 4, y2: beamY + beamH / 2, stroke: '#9ca3af', 'stroke-width': 1 }));
+    svg.appendChild(txt(beamX1 - 14, beamY + 4, '{{ result.summary.section.nominal }}', { 'text-anchor': 'end', fill: '#6b7280', 'font-size': 9 }));
+
+    // ---- dimension line ----
+    const segmentDimY = beamY + beamH / 2 + 28;
+    const totalDimY = segmentDimY + 18;
+    [beamX1, ...supportXs, beamX2].forEach(x => {
+        svg.appendChild(el('line', { x1: x, y1: beamY + beamH / 2 + 6, x2: x, y2: totalDimY + 2, stroke: '#d1d5db', 'stroke-width': 1 }));
+    });
+
+    if (leftOverhang > 0) {
+        svg.appendChild(drawDimension(beamX1, supportXs[0], segmentDimY, leftOverhang.toFixed(2) + ' ft'));
+    }
+    for (let i = 0; i < supportXs.length - 1; i++) {
+        const seg = supportPositions[i + 1] - supportPositions[i];
+        svg.appendChild(drawDimension(supportXs[i], supportXs[i + 1], segmentDimY, seg.toFixed(2) + ' ft'));
+    }
+    if (rightOverhang > 0) {
+        svg.appendChild(drawDimension(supportXs[supportXs.length - 1], beamX2, segmentDimY, rightOverhang.toFixed(2) + ' ft'));
+    }
+    if (leftOverhang > 0 || rightOverhang > 0 || supportXs.length > 2) {
+        svg.appendChild(drawDimension(beamX1, beamX2, totalDimY, totalLength.toFixed(2) + ' ft total', '#6b7280'));
+    }
+
+    // ---- support symbols ----
+    function drawWallPlate(x) {
+        const g = el('g', {});
+        const baseY = beamY + beamH / 2;
+        // Bearing plate rectangle
+        g.appendChild(el('rect', { x: x - 20, y: baseY, width: 40, height: 12, fill: '#4b5563', rx: 1 }));
+        // Foundation block
+        g.appendChild(el('rect', { x: x - 24, y: baseY + 12, width: 48, height: 8, fill: '#374151', rx: 1 }));
+        // Hatch lines
+        for (let i = 0; i < 5; i++) {
+            const hx = (x - 20) + i * 10;
+            g.appendChild(el('line', { x1: hx, y1: baseY + 20, x2: hx - 6, y2: baseY + 28, stroke: '#6b7280', 'stroke-width': 1 }));
+        }
+        return g;
+    }
+
+    function drawPin(x) {
+        const g = el('g', {});
+        const baseY = beamY + beamH / 2;
+        const pts = `${x},${baseY} ${x - 14},${baseY + 22} ${x + 14},${baseY + 22}`;
+        g.appendChild(el('polygon', { points: pts, fill: '#374151', stroke: '#1f2937', 'stroke-width': 1 }));
+        // Circle at pin point
+        g.appendChild(el('circle', { cx: x, cy: baseY + 1, r: 3, fill: '#6b7280' }));
+        g.appendChild(el('line', { x1: x - 16, y1: baseY + 24, x2: x + 16, y2: baseY + 24, stroke: '#374151', 'stroke-width': 2 }));
+        for (let i = 0; i < 4; i++) {
+            const hx = (x - 14) + i * 9;
+            g.appendChild(el('line', { x1: hx, y1: baseY + 24, x2: hx - 6, y2: baseY + 30, stroke: '#6b7280', 'stroke-width': 1 }));
+        }
+        return g;
+    }
+
+    function drawHanger(x) {
+        const g = el('g', {});
+        const topY = beamY - beamH / 2;
+        // Vertical connector
+        g.appendChild(el('rect', { x: x - 3, y: topY - 20, width: 6, height: 22, fill: '#4b5563' }));
+        // Header/structure above
+        g.appendChild(el('rect', { x: x - 22, y: topY - 26, width: 44, height: 8, fill: '#374151', rx: 1 }));
+        // Side flanges of hanger
+        g.appendChild(el('rect', { x: x - 14, y: topY - 4, width: 4, height: beamH + 4, fill: '#6b7280', rx: 1 }));
+        g.appendChild(el('rect', { x: x + 10, y: topY - 4, width: 4, height: beamH + 4, fill: '#6b7280', rx: 1 }));
+        return g;
+    }
+
+    // Support labels
+    supportXs.forEach((x, i) => {
+        svg.appendChild(txt(x, beamY - beamH / 2 - 8, supportLabels[i], {
+            'text-anchor': 'middle', fill: '#9ca3af', 'font-size': 9, 'font-family': 'JetBrains Mono, monospace'
+        }));
+    });
+
+    function drawSupport(x, type) {
+        if (type === 'hanger') return drawHanger(x);
+        if (type === 'column') return drawPin(x);
+        return drawWallPlate(x);
+    }
+
+    supportXs.forEach((x, i) => {
+        svg.appendChild(drawSupport(x, supportTypes[i] || 'wall_plate'));
+    });
+
+    // ---- Distributed load arrows, grouped by their true extents ----
+    const loadColor = '#2d7dd2';
+    const arrowBot = beamY - beamH / 2;
+    const rawLoadZones = JSON.parse(document.getElementById('beam-load-zones').textContent || '[]');
+    const groupedZones = new Map();
+    rawLoadZones.forEach(zone => {
+        const key = `${Number(zone.start).toFixed(6)}:${Number(zone.end).toFixed(6)}`;
+        const grouped = groupedZones.get(key) || { start: Number(zone.start), end: Number(zone.end), w: 0, types: [] };
+        grouped.w += Number(zone.w);
+        if (!grouped.types.includes(zone.load_type)) grouped.types.push(zone.load_type);
+        groupedZones.set(key, grouped);
+    });
+    const typeLabels = { dead: 'D', live: 'L', snow: 'S', roof_live: 'Lr', wind: 'W' };
+    Array.from(groupedZones.values()).forEach((zone, zoneIndex) => {
+        const zoneX1 = beamX1 + (zone.start / totalLength) * beamLen;
+        const zoneX2 = beamX1 + (zone.end / totalLength) * beamLen;
+        const zoneWidth = Math.max(zoneX2 - zoneX1, 1);
+        const arrowTop = 14 + zoneIndex * 10;
+        const numArrows = Math.max(1, Math.round(zoneWidth / 38));
+        svg.appendChild(el('line', { x1: zoneX1, y1: arrowTop, x2: zoneX2, y2: arrowTop, stroke: loadColor, 'stroke-width': 2 }));
+        for (let i = 0; i <= numArrows; i++) {
+            const ax = zoneX1 + (zoneWidth / numArrows) * i;
+            svg.appendChild(arrowDown(ax, arrowTop, arrowBot, loadColor));
+        }
+        const label = `${zone.types.map(type => typeLabels[type] || type).join('+')} ${zone.w.toFixed(1)} plf`;
+        svg.appendChild(txt((zoneX1 + zoneX2) / 2, arrowTop - 3, label, {
+            'text-anchor': 'middle', fill: loadColor, 'font-weight': '600', 'font-size': 9
+        }));
+    });
+
+    // ---- Concentrated loads at their actual member coordinates ----
+    const pointLoadColor = '#c2412d';
+    const rawPointLoads = JSON.parse(document.getElementById('beam-point-loads').textContent || '[]');
+    const groupedPointLoads = new Map();
+    rawPointLoads.forEach(load => {
+        const location = Number(load.location);
+        const key = location.toFixed(6);
+        const grouped = groupedPointLoads.get(key) || { location, p: 0, types: [] };
+        grouped.p += Number(load.p);
+        if (!grouped.types.includes(load.load_type)) grouped.types.push(load.load_type);
+        groupedPointLoads.set(key, grouped);
+    });
+    const pointLoadTop = Math.min(arrowBot - 12, 16 + groupedZones.size * 10);
+    Array.from(groupedPointLoads.values()).forEach(load => {
+        const x = beamX1 + (load.location / totalLength) * beamLen;
+        svg.appendChild(arrowDown(x, pointLoadTop, arrowBot, pointLoadColor));
+        const label = `${load.types.map(type => typeLabels[type] || type).join('+')} ${load.p.toFixed(0)} lb`;
+        const nearLeft = x < beamX1 + 55;
+        const nearRight = x > beamX2 - 55;
+        const labelX = nearLeft ? x + 4 : nearRight ? x - 4 : x;
+        const anchor = nearLeft ? 'start' : nearRight ? 'end' : 'middle';
+        svg.appendChild(txt(labelX, pointLoadTop - 3, label, {
+            'text-anchor': anchor, fill: pointLoadColor, 'font-weight': '700', 'font-size': 9
+        }));
+    });
+
+    // ---- Reaction arrows ----
+    const reactColor = '#16a34a';
+    const reactY1 = beamY + beamH / 2 + 22;
+    const reactY2 = beamY + beamH / 2 + 2;
+
+    supportXs.forEach((x, i) => {
+        if ((supportTypes[i] || 'wall_plate') === 'hanger') return;
+        svg.appendChild(arrowUp(x, reactY1, reactY2, reactColor));
+        svg.appendChild(txt(x, reactY1 + 12, `R${i + 1}`, { 'text-anchor': 'middle', fill: reactColor, 'font-family': 'JetBrains Mono, monospace', 'font-size': 9 }));
+    });
+
+})();
+</script>
+
+{% endif %}

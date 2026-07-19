@@ -1,0 +1,23 @@
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.Settings.dev"
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+# Single-letter names (E, I, ...) are standard engineering notation
+# (modulus of elasticity, moment of inertia) throughout the calc engine
+# and the benchmark tests that verify its formulas directly.
+"engine/*.py" = ["E741", "E743"]
+"tests/*.py" = ["E741", "E743"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["core", "engine", "users"]
