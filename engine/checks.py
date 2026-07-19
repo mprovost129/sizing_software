@@ -25,19 +25,23 @@ so the result can be presented as a transparent, traceable calculation
 report rather than a bare pass/fail table (per the project's Initial
 MVP requirement).
 """
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from . import beam as beam_mod
 from .factors import (
+    DRY_SERVICE_FACTORS,
     LOAD_DURATION_FACTORS,
     REPETITIVE_MEMBER_FACTOR,
     SIZE_FACTORS_FB,
+    beam_stability_factor,
     bearing_area_factor,
+    glulam_volume_factor,
     required_bearing_length,
+    wet_service_factors,
 )
 from .loads import PointLoad, UniformLoad
 from .materials import Material
-from .sections import Section
+from .sections import SIZE_LABELS, Section
 from .span import SpanMode, clear_span
 
 
@@ -81,6 +85,14 @@ class SectionSummary:
     A: float
     I: float
     S: float
+    plies: int = 1
+
+    @property
+    def label(self) -> str:
+        """Section label with a ply prefix for built-up members; engineered
+        (LVL/glulam) sizes display their human label rather than the raw id."""
+        base = SIZE_LABELS.get(self.nominal, self.nominal)
+        return f"{self.plies}-ply {base}" if self.plies > 1 else base
 
 
 @dataclass
@@ -131,12 +143,16 @@ class BeamSummary:
     support_labels: list[str]
     section: SectionSummary
     material_name: str
+    material_category: str
     fb_base: float
     fv_base: float
     fc_perp_base: float
     e: float
     cf: float
     cr: float
+    cl: float
+    rb: float
+    unbraced_length: float
     bearing_length_left: float
     bearing_length_right: float
     cb_left: float
@@ -148,6 +164,11 @@ class BeamSummary:
     combos: list
     load_zones: list
     point_loads: list
+    wet_service: bool = False
+    cm_fb: float = 1.0
+    cm_fv: float = 1.0
+    cm_fcperp: float = 1.0
+    cm_e: float = 1.0
     shear_diagram: DiagramSeries | None = None
     moment_diagram: DiagramSeries | None = None
     deflection_live_diagram: DiagramSeries | None = None
@@ -208,6 +229,8 @@ def design_beam(
     right_overhang: float = 0.0,
     continuous_spans: list[float] | None = None,
     bearing_lengths: list[float] | None = None,
+    unbraced_length: float | None = None,
+    wet_service: bool = False,
     combinations=DEFAULT_COMBINATIONS,
 ) -> BeamDesignResult:
     # `span` is interpreted per `span_mode`; the back span (support to
@@ -240,8 +263,39 @@ def design_beam(
         span_segments = [analysis_span]
         bearing_lengths = [bearing_length_left, bearing_length_right]
 
-    cf = SIZE_FACTORS_FB.get(section.nominal, 1.0)
-    cr = REPETITIVE_MEMBER_FACTOR if repetitive else 1.0
+    # Bending Fb adjustment for member depth. Visually graded sawn lumber
+    # uses the tabulated size factor CF; engineered LVL uses a volume/depth
+    # factor CV = (d_ref/d)^exponent -- both fold into Fb the same way, so
+    # the rest of the code treats this single `cf` uniformly. Glulam is the
+    # exception: its volume factor CV (a length/depth/width function) does
+    # NOT apply simultaneously with the beam stability factor CL, so it is
+    # kept separate (`glulam_cv`) and the bending check uses min(CV, CL).
+    glulam_cv = None
+    if material.is_lvl:
+        cf = (material.cv_reference_depth / section.d) ** material.cv_exponent
+    elif material.is_glulam:
+        cf = 1.0
+        # L = length between points of zero moment. Use the longest span
+        # segment (conservative: a larger L gives a smaller CV).
+        glulam_length = max(span_segments)
+        glulam_cv = glulam_volume_factor(glulam_length, section.d, section.b, material.cv_exponent)
+    elif material.fb_by_size:
+        # Southern Pine (NDS-S Table 4B): Fb is tabulated per size, so the
+        # size effect is already included and CF = 1.0. Swap in the
+        # size-specific Fb so the summary and every check use it.
+        cf = 1.0
+        material = replace(material, Fb=material.fb_by_size.get(section.nominal, material.Fb))
+    else:
+        cf = SIZE_FACTORS_FB.get(section.nominal, 1.0)
+    # The repetitive-member factor applies only to a system of 3+ single
+    # sawn members spaced <= 24" o.c. sharing load through sheathing (NDS
+    # 4.3.9); never to an engineered (LVL/glulam) or built-up member.
+    cr = REPETITIVE_MEMBER_FACTOR if (repetitive and section.plies == 1 and material.category == "sawn") else 1.0
+    # Wet service factor CM (NDS-S Table 4A) applies to sawn lumber only;
+    # LVL and glulam are modelled dry-only here (CM = 1.0). The Fb footnote
+    # depends on CF, so it is resolved here where CF is known.
+    wet_applied = wet_service and material.category == "sawn"
+    cm = wet_service_factors(material.Fb, cf) if wet_applied else DRY_SERVICE_FACTORS
     cantilever_deflection_limit_live = cantilever_deflection_limit_live or deflection_limit_live
     cantilever_deflection_limit_total = cantilever_deflection_limit_total or deflection_limit_total
 
@@ -257,15 +311,22 @@ def design_beam(
         support_labels=[f"B{i + 1}" for i in range(len(support_positions))],
         section=SectionSummary(
             nominal=section.nominal, b=section.b, d=section.d,
-            A=section.A, I=section.I, S=section.S,
+            A=section.A, I=section.I, S=section.S, plies=section.plies,
         ),
         material_name=material.name,
+        material_category=material.category,
         fb_base=material.Fb,
         fv_base=material.Fv,
         fc_perp_base=material.Fc_perp,
         e=material.E,
-        cf=cf,
+        # For glulam, `cf` reports the volume factor CV (applied as
+        # min(CV, CL)); for sawn/LVL it is the CF/CV depth factor folded
+        # directly into F'b.
+        cf=glulam_cv if glulam_cv is not None else cf,
         cr=cr,
+        cl=1.0,  # updated below once the governing bending combination is known
+        rb=0.0,
+        unbraced_length=unbraced_length or 0.0,
         bearing_length_left=bearing_lengths[0],
         bearing_length_right=bearing_lengths[-1],
         cb_left=bearing_area_factor(bearing_lengths[0]),
@@ -274,6 +335,11 @@ def design_beam(
         deflection_limit_total=deflection_limit_total,
         cantilever_deflection_limit_live=cantilever_deflection_limit_live,
         cantilever_deflection_limit_total=cantilever_deflection_limit_total,
+        wet_service=wet_applied,
+        cm_fb=cm.fb,
+        cm_fv=cm.fv,
+        cm_fcperp=cm.fc_perp,
+        cm_e=cm.e,
         combos=_combo_summaries(total_length, loads, combinations, support_positions),
         load_zones=[
             {
@@ -296,7 +362,26 @@ def design_beam(
         ],
     )
 
-    bending = _governing_bending(total_length, loads, section, material, cf, cr, combinations, support_positions)
+    # From here on every check uses the moisture-adjusted reference values.
+    # The summary above kept the unadjusted base values (and the CM factors
+    # separately) so the report can show both. In dry service this is a
+    # no-op (all CM factors are 1.0), so existing dry designs are unchanged.
+    if wet_applied:
+        material = replace(
+            material,
+            Fb=material.Fb * cm.fb,
+            Fv=material.Fv * cm.fv,
+            Fc_perp=material.Fc_perp * cm.fc_perp,
+            E=material.E * cm.e,
+            Emin=material.Emin * cm.emin,
+        )
+
+    bending, stability = _governing_bending(
+        total_length, loads, section, material, cf, cr, combinations, support_positions,
+        unbraced_length, glulam_cv,
+    )
+    summary.cl = stability.cl
+    summary.rb = stability.rb
     shear = _governing_shear(total_length, loads, section, material, combinations, support_positions)
     bearing_checks = [
         _bearing_check(total_length, loads, section, material, length, i, support_positions)
@@ -459,18 +544,44 @@ def _combo_summaries(total_length, loads, combinations, support_positions):
     return summaries
 
 
-def _governing_bending(total_length, loads, section, material, cf, cr, combinations, support_positions):
+def _governing_bending(total_length, loads, section, material, cf, cr, combinations, support_positions, unbraced_length=None, glulam_cv=None):
+    # The beam stability factor CL (NDS 3.3.3) reduces Fb when the
+    # compression edge is not continuously braced. CL depends on Fb* (which
+    # includes the per-combination CD), so it is evaluated inside the combo
+    # loop; the stability data of the governing combination is returned for
+    # the report. Geometry-only quantities (le, RB) are identical across
+    # combinations. Emin (the reference modulus for stability) drives FbE.
+    #
+    # For glulam, `cf` is 1.0 and the volume factor CV (glulam_cv) is
+    # applied as the LESSER of CV and CL, not simultaneously (NDS 5.3.6);
+    # Fb* deliberately excludes CV so CL is computed on the same basis.
     best = None
+    best_stability = None
     for combo in combinations:
         active = _filter(loads, combo.load_types)
         results = beam_mod.analyze(total_length, active, support_positions=support_positions)
         m_in_lb = abs(results.m_max) * 12
         fb = m_in_lb / section.S
-        fb_allow = material.Fb * cf * cr * combo.cd
+        fb_star = material.Fb * cf * cr * combo.cd
+        stability = beam_stability_factor(unbraced_length, section.d, section.b, material.Emin, fb_star)
+        bending_factor = min(glulam_cv, stability.cl) if glulam_cv is not None else stability.cl
+        fb_allow = fb_star * bending_factor
         ratio = fb / fb_allow
         if best is None or ratio > best.ratio:
             best = CheckResult("Bending", fb, fb_allow, ratio, combo.name, ratio <= 1.0)
-    return best
+            best_stability = stability
+    if best_stability and best_stability.over_slender:
+        # RB > 50 is prohibited by NDS 3.3.3.7 regardless of the stress
+        # ratio. Force a loud, unmistakable failure (same pattern as a
+        # net-uplift bearing check) instead of reporting a value that
+        # could be misread as adequate.
+        best = CheckResult(
+            f"Bending -- RB = {best_stability.rb:.0f} EXCEEDS NDS SLENDERNESS LIMIT OF 50: "
+            "more lateral bracing of the compression edge or a wider member is required",
+            demand=best.demand, capacity=best.capacity, ratio=max(best.ratio, 999.0),
+            governing_combo=best.governing_combo, passed=False,
+        )
+    return best, best_stability
 
 
 def _governing_shear(total_length, loads, section, material, combinations, support_positions):

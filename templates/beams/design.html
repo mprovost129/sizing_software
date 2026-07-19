@@ -502,22 +502,37 @@
                         <label class="fc-label" for="{{ form.material.id_for_label }}">Material</label>
                         <select name="{{ form.material.html_name }}"
                                 id="{{ form.material.id_for_label }}"
+                                onchange="updateSizeCategory()"
                                 class="fc-select {% if form.material.errors %}is-invalid{% endif %}">
                             {% for val, label in form.material.field.choices %}
                             <option value="{{ val }}" {% if form.material.value == val or val == 'spf_no2' and not form.material.value %}selected{% endif %}>{{ label }}</option>
                             {% endfor %}
                         </select>
-                        <p style="font-size:0.72rem;color:var(--fc-text-muted);margin:.3rem 0 0;">Sawn dimension lumber. Southern Pine, LVL, and steel coming later.</p>
+                        <p style="font-size:0.72rem;color:var(--fc-text-muted);margin:.3rem 0 0;">Sawn dimension lumber and generic LVL grades. Southern Pine, glulam, and steel coming later.</p>
                         {% for e in form.material.errors %}<p class="fc-field-error">{{ e }}</p>{% endfor %}
+                    </div>
+                    <div class="fc-form-group">
+                        <label class="fc-label" for="{{ form.service_condition.id_for_label }}">Service condition</label>
+                        <select name="{{ form.service_condition.html_name }}"
+                                id="{{ form.service_condition.id_for_label }}"
+                                class="fc-select {% if form.service_condition.errors %}is-invalid{% endif %}">
+                            {% for val, label in form.service_condition.field.choices %}
+                            <option value="{{ val }}" {% if form.service_condition.value == val or val == 'dry' and not form.service_condition.value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                        <p style="font-size:0.72rem;color:var(--fc-text-muted);margin:.3rem 0 0;">Wet service applies NDS-S Table 4A C<sub>M</sub> (F<sub>b</sub>&times;0.85*, F<sub>v</sub>&times;0.97, F<sub>c&perp;</sub>&times;0.67, E&times;0.90) for exterior or damp exposure. *C<sub>M</sub> on F<sub>b</sub> stays 1.0 when F<sub>b</sub>&middot;C<sub>F</sub> &le; 1150 psi.</p>
+                        {% for e in form.service_condition.errors %}<p class="fc-field-error">{{ e }}</p>{% endfor %}
                     </div>
                     <div class="member-strip">
                         <div class="member-strip__size">
                             <label class="fc-label">Member size</label>
-                            <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:0.4rem;" id="sizeButtons">
+                            <div style="display:flex;flex-wrap:wrap;gap:0.4rem;" id="sizeButtons">
                                 {% for val, label in form.nominal_size.field.choices %}
                                 <button type="button"
                                         class="size-btn fc-btn fc-btn--secondary {% if form.nominal_size.value == val or forloop.first and not form.nominal_size.value %}size-btn--active{% endif %}"
                                         data-size="{{ val }}"
+                                        data-category="{% if 'lvl_' in val %}lvl{% elif 'gl_' in val %}glulam{% else %}sawn{% endif %}"
+                                        style="flex:1 1 3.2rem;"
                                         ondblclick="runSingleAnalysis('{{ val }}')"
                                         onclick="selectSize(this, '{{ val }}')">
                                     {{ label }}
@@ -527,6 +542,18 @@
                             <input type="hidden" name="{{ form.nominal_size.html_name }}"
                                    id="nominalSizeInput"
                                    value="{{ form.nominal_size.value|default:'2x6' }}">
+                            {% for e in form.nominal_size.errors %}<p class="fc-field-error" style="margin:.3rem 0 0;">{{ e }}</p>{% endfor %}
+                        </div>
+                        <div class="fc-form-group" id="pliesGroup" style="margin-bottom:0;align-self:center;">
+                            <label class="fc-label" for="{{ form.plies.id_for_label }}">Plies</label>
+                            <select name="{{ form.plies.html_name }}"
+                                    id="{{ form.plies.id_for_label }}"
+                                    class="fc-select {% if form.plies.errors %}is-invalid{% endif %}">
+                                {% for val, label in form.plies.field.choices %}
+                                <option value="{{ val }}" {% if form.plies.value|stringformat:'s' == val|stringformat:'s' or val == 1 and not form.plies.value %}selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                            {% for e in form.plies.errors %}<p class="fc-field-error">{{ e }}</p>{% endfor %}
                         </div>
                         <div class="fc-check-group fc-form-group" style="margin-bottom:0;align-self:center;">
                             <input type="checkbox" name="{{ form.repetitive.html_name }}"
@@ -545,6 +572,21 @@
                                 <i class="bi bi-floppy"></i>
                             </button>
                         </div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;margin-top:0.1rem;">
+                        <label class="fc-label" for="{{ form.unbraced_length_ft.id_for_label }}" style="margin:0;white-space:nowrap;">
+                            Unbraced compression edge (ft)
+                        </label>
+                        <input type="number" step="any" min="0" style="max-width:9rem;"
+                               name="{{ form.unbraced_length_ft.html_name }}"
+                               id="{{ form.unbraced_length_ft.id_for_label }}"
+                               class="fc-input {% if form.unbraced_length_ft.errors %}is-invalid{% endif %}"
+                               value="{{ form.unbraced_length_ft.value|default_if_none:'' }}"
+                               placeholder="Continuously braced">
+                        <span style="font-size:0.72rem;color:var(--fc-text-muted);">
+                            Blank = compression edge braced (C<sub>L</sub> = 1.0), e.g. joists under nailed sheathing. Enter the brace spacing for a beam whose top edge is not continuously supported (NDS 3.3.3).
+                        </span>
+                        {% for e in form.unbraced_length_ft.errors %}<p class="fc-field-error">{{ e }}</p>{% endfor %}
                     </div>
                     <p style="font-size:0.72rem;color:var(--fc-text-muted);margin:0;">
                         Double-click any member size to run it immediately. This top strip stays aligned with the preview, closer to the BC Calc workflow.
@@ -1536,7 +1578,14 @@ function renderGeometryPreview(targetSvg) {
     // back to a 2x6-ish default depth when no size is picked, and is
     // clamped so a deep 2x12 still leaves room for the supports and
     // dimension line below it.
-    const DRESSED_DEPTHS_IN = { '2x4': 3.5, '2x6': 5.5, '2x8': 7.25, '2x10': 9.25, '2x12': 11.25 };
+    const DRESSED_DEPTHS_IN = {
+        '2x4': 3.5, '2x6': 5.5, '2x8': 7.25, '2x10': 9.25, '2x12': 11.25,
+        'lvl_7.25': 7.25, 'lvl_9.25': 9.25, 'lvl_11.25': 11.25, 'lvl_11.875': 11.875,
+        'lvl_14': 14, 'lvl_16': 16, 'lvl_18': 18,
+        'gl_3.5x9': 9, 'gl_3.5x12': 12, 'gl_3.5x15': 15,
+        'gl_5.125x12': 12, 'gl_5.125x15': 15, 'gl_5.125x18': 18,
+        'gl_5.5x15': 15, 'gl_5.5x18': 18, 'gl_6.75x18': 18, 'gl_6.75x21': 21,
+    };
     const depthIn = DRESSED_DEPTHS_IN[layout.nominalSize] || 5.5;
     const beamH = Math.round(Math.min(34, Math.max(14, depthIn * 2.5 + 6)));
     const beamX1 = margin;
@@ -1812,6 +1861,47 @@ function selectSize(btn, size) {
     renderGeometryPreview(document.getElementById('beamLivePreviewSvg'));
     renderGeometryPreview(document.getElementById('beamDiagramSvg'));
 }
+
+// ---- Material -> size category coupling ----
+// Material ids and size ids share a category prefix: "lvl_" (LVL) and
+// "gl_" (glulam); everything else is sawn. Show only the size buttons
+// whose category matches the selected material, jumping to the first
+// valid size if the current one is now hidden. Engineered materials
+// (LVL, glulam) are dry-service only, so the wet option is disabled; and
+// glulam is a monolithic section, so the ply control is hidden for it.
+function materialCategory(value) {
+    value = value || '';
+    if (value.startsWith('lvl_')) return 'lvl';
+    if (value.startsWith('gl_')) return 'glulam';
+    return 'sawn';
+}
+function updateSizeCategory() {
+    const matSel = document.getElementById('{{ form.material.id_for_label }}');
+    const wantCat = materialCategory(matSel && matSel.value);
+    const isEngineered = wantCat !== 'sawn';
+    let activeVisible = false;
+    let firstVisible = null;
+    document.querySelectorAll('#sizeButtons .size-btn').forEach(btn => {
+        const match = btn.dataset.category === wantCat;
+        btn.style.display = match ? '' : 'none';
+        if (match) {
+            if (!firstVisible) firstVisible = btn;
+            if (btn.classList.contains('size-btn--active')) activeVisible = true;
+        }
+    });
+    if (!activeVisible && firstVisible) {
+        selectSize(firstVisible, firstVisible.dataset.size);
+    }
+    const svc = document.getElementById('{{ form.service_condition.id_for_label }}');
+    if (svc) {
+        const wetOpt = svc.querySelector('option[value="wet"]');
+        if (isEngineered && svc.value === 'wet') svc.value = 'dry';
+        if (wetOpt) wetOpt.disabled = isEngineered;
+    }
+    const pliesGroup = document.getElementById('pliesGroup');
+    if (pliesGroup) pliesGroup.style.display = (wantCat === 'glulam') ? 'none' : '';
+}
+document.addEventListener('DOMContentLoaded', updateSizeCategory);
 
 function selectMemberType(btn, memberType) {
     document.querySelectorAll('.member-type-btn').forEach(button => button.classList.remove('member-type-btn--active'));

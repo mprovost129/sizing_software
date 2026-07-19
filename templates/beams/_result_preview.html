@@ -5,9 +5,9 @@
     <div>
         <p class="verdict-title">
             {% if result.passed %}
-            <i class="bi bi-check-circle-fill"></i> PASS &mdash; {{ result.summary.section.nominal }} {{ result.summary.material_name }}
+            <i class="bi bi-check-circle-fill"></i> PASS &mdash; {{ result.summary.section.label }} {{ result.summary.material_name }}
             {% else %}
-            <i class="bi bi-x-circle-fill"></i> FAIL &mdash; {{ result.summary.section.nominal }} {{ result.summary.material_name }}
+            <i class="bi bi-x-circle-fill"></i> FAIL &mdash; {{ result.summary.section.label }} {{ result.summary.material_name }}
             {% endif %}
         </p>
         <p class="verdict-sub">
@@ -34,7 +34,15 @@
                 {{ result.summary.right_overhang|floatformat:2 }} ft right
                 (total length {{ result.summary.total_length|floatformat:2 }} ft)
             {% endif %}
-            &middot; F'b = {{ result.summary.fb_base }} &times; CF({{ result.summary.cf }}) &times; Cr({{ result.summary.cr }}) psi
+            &middot; F'b = {{ result.summary.fb_base }} &times; {% if result.summary.material_category == 'glulam' %}min[CV({{ result.summary.cf|floatformat:3 }}), CL({{ result.summary.cl|floatformat:3 }})]{% elif result.summary.material_category == 'lvl' %}CV({{ result.summary.cf|floatformat:3 }}){% if result.summary.unbraced_length %} &times; CL({{ result.summary.cl|floatformat:3 }}){% endif %}{% else %}CF({{ result.summary.cf }}) &times; Cr({{ result.summary.cr }}){% if result.summary.wet_service %} &times; CM({{ result.summary.cm_fb|floatformat:2 }}){% endif %}{% if result.summary.unbraced_length %} &times; CL({{ result.summary.cl|floatformat:3 }}){% endif %}{% endif %} psi
+            {% if result.summary.wet_service %}
+            <br>Wet service &mdash; C<sub>M</sub> applied: F<sub>b</sub>&times;{{ result.summary.cm_fb|floatformat:2 }}, F<sub>v</sub>&times;{{ result.summary.cm_fv|floatformat:2 }}, F<sub>c&perp;</sub>&times;{{ result.summary.cm_fcperp|floatformat:2 }}, E&times;{{ result.summary.cm_e|floatformat:2 }}
+            {% endif %}
+            {% if result.summary.material_category == 'lvl' %}
+            <br><strong>LVL:</strong> engineered member &mdash; C<sub>V</sub> = (12/d)<sup>0.136</sup> depth factor, no C<sub>r</sub>, dry-service. Generic {{ result.summary.material_name }} grade values &mdash; confirm your product meets this grade.
+            {% elif result.summary.material_category == 'glulam' %}
+            <br><strong>Glulam:</strong> engineered member &mdash; volume factor C<sub>V</sub> (NDS 5.3.6) applied as the lesser of C<sub>V</sub> and C<sub>L</sub>, no C<sub>r</sub>, dry-service. Generic {{ result.summary.material_name }} values (balanced layup).
+            {% endif %}
         </p>
     </div>
     <span class="fc-badge fc-badge--{% if result.passed %}pass{% else %}fail{% endif %}">
@@ -45,7 +53,7 @@
 <div class="stat-row">
     <div class="stat-pill">
         <div class="stat-label">Section</div>
-        <div class="stat-value" style="font-size:.9rem;">{{ result.summary.section.nominal }}</div>
+        <div class="stat-value" style="font-size:.9rem;">{{ result.summary.section.label }}</div>
     </div>
     <div class="stat-pill">
         <div class="stat-label">A (in&sup2;)</div>
@@ -60,13 +68,21 @@
         <div class="stat-value">{{ result.summary.section.I|floatformat:2 }}</div>
     </div>
     <div class="stat-pill">
-        <div class="stat-label">C<sub>F</sub></div>
-        <div class="stat-value">{{ result.summary.cf|floatformat:2 }}</div>
+        <div class="stat-label">C<sub>{% if result.summary.material_category == 'sawn' %}F{% else %}V{% endif %}</sub></div>
+        <div class="stat-value">{{ result.summary.cf|floatformat:3 }}</div>
     </div>
+    {% if result.summary.material_category == 'sawn' %}
     <div class="stat-pill">
         <div class="stat-label">C<sub>r</sub></div>
         <div class="stat-value">{{ result.summary.cr|floatformat:2 }}</div>
     </div>
+    {% endif %}
+    {% if result.summary.unbraced_length %}
+    <div class="stat-pill">
+        <div class="stat-label">C<sub>L</sub> (R<sub>B</sub>={{ result.summary.rb|floatformat:1 }})</div>
+        <div class="stat-value">{{ result.summary.cl|floatformat:3 }}</div>
+    </div>
+    {% endif %}
     <div class="stat-pill">
         <div class="stat-label">Back Span Defl.</div>
         <div class="stat-value">L/{{ result.summary.deflection_limit_live|floatformat:0 }} / L/{{ result.summary.deflection_limit_total|floatformat:0 }}</div>
@@ -92,7 +108,7 @@
             {% else %}
                 {{ result.summary.span|floatformat:2 }} ft span
             {% endif %}
-            &middot; {{ result.summary.section.nominal }} {{ result.summary.material_name }}
+            &middot; {{ result.summary.section.label }} {{ result.summary.material_name }}
         </span>
     </div>
     <div class="fc-card-body" style="padding:1.5rem 2rem;">

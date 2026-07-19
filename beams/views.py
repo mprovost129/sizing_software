@@ -18,7 +18,7 @@ from engine import (
     design_beam,
     get_material,
 )
-from engine.sections import NOMINAL_SIZES
+from engine.sections import GLULAM_SIZES, LVL_SIZES, NOMINAL_SIZES
 
 from .choices import MEMBER_TYPE_CHOICES
 from .continuous import (
@@ -56,7 +56,7 @@ COPYABLE_DESIGN_FIELDS = (
     "left_overhang_ft", "right_overhang_ft",
     "uniform_load_basis", "spacing_in",
     "dead_load_plf", "live_load_plf", "snow_load_plf", "roof_live_load_plf", "wind_load_plf",
-    "material", "nominal_size", "repetitive",
+    "material", "service_condition", "nominal_size", "plies", "repetitive", "unbraced_length_ft",
     "bearing_length_left_in", "bearing_length_mid_in", "bearing_length_mid_2_in", "bearing_length_right_in",
     "support_type_left", "support_type_mid", "support_type_mid_2", "support_type_right",
     "deflection_limit_live", "deflection_limit_total",
@@ -76,7 +76,7 @@ TAB_FIELDS = {
     ),
     "settings": (
         "project", "new_project_name", "name", "member_type", "performance_profile", "subfloor_profile",
-        "material", "nominal_size", "repetitive",
+        "material", "service_condition", "nominal_size", "plies", "repetitive", "unbraced_length_ft",
         "deflection_limit_live", "deflection_limit_total",
         "cantilever_deflection_limit_live", "cantilever_deflection_limit_total",
     ),
@@ -145,7 +145,10 @@ def _build_loads(form, point_load_formset, distributed_load_formset, total_lengt
 
 def _run_design(data, loads, nominal_size):
     """Run design_beam for a given nominal size using form data."""
-    section = Section.from_nominal(nominal_size)
+    # Glulam is a monolithic section (no ply multiplier); its size id
+    # already encodes the full width.
+    plies = 1 if get_material(data["material"]).is_glulam else (data.get("plies") or 1)
+    section = Section.from_nominal(nominal_size, plies=plies)
     span_values = full_span_values(data)
     continuous_spans = span_values if len(span_values) > 1 else None
     bearing_lengths = None
@@ -179,6 +182,8 @@ def _run_design(data, loads, nominal_size):
         right_overhang=data.get("right_overhang_ft") or 0,
         continuous_spans=continuous_spans,
         bearing_lengths=bearing_lengths,
+        unbraced_length=(data.get("unbraced_length_ft") or 0) * 12 or None,
+        wet_service=(data.get("service_condition") or "dry") == "wet",
     )
 
 
@@ -317,7 +322,7 @@ class BeamDesignView(LoginRequiredMixin, View):
         project_id = request.GET.get("project", "")
         if project_id.isdigit():
             initial["project"] = get_object_or_404(BeamProject, pk=int(project_id), user=request.user)
-        if request.GET.get("size") in NOMINAL_SIZES:
+        if request.GET.get("size") in NOMINAL_SIZES or request.GET.get("size") in LVL_SIZES or request.GET.get("size") in GLULAM_SIZES:
             initial["nominal_size"] = request.GET["size"]
         context = {
             "form": BeamDesignForm(initial=initial, user=request.user),
@@ -449,8 +454,11 @@ class BeamDesignView(LoginRequiredMixin, View):
                 roof_live_load_plf=data.get("roof_live_load_plf") or 0,
                 wind_load_plf=data.get("wind_load_plf") or 0,
                 material=data["material"],
+                service_condition=data.get("service_condition") or "dry",
                 nominal_size=data["nominal_size"],
+                plies=data.get("plies") or 1,
                 repetitive=data["repetitive"],
+                unbraced_length_ft=data.get("unbraced_length_ft"),
                 bearing_length_left_in=data["bearing_length_left_in"],
                 bearing_length_mid_in=data.get("bearing_length_mid_in"),
                 bearing_length_mid_2_in=data.get("bearing_length_mid_2_in"),
@@ -476,7 +484,15 @@ class BeamDesignView(LoginRequiredMixin, View):
             scan_rows = []
             economy_size = None
             economy_ratio = None
-            for nominal in NOMINAL_SIZES:
+            # Scan the size set matching the selected material's category.
+            scan_material = get_material(data["material"])
+            if scan_material.is_lvl:
+                scan_sizes = LVL_SIZES
+            elif scan_material.is_glulam:
+                scan_sizes = GLULAM_SIZES
+            else:
+                scan_sizes = NOMINAL_SIZES
+            for nominal in scan_sizes:
                 result = _run_design(data, loads, nominal)
                 scan_rows.append({"nominal": nominal, "result": result, "passed": result.passed})
                 if result.passed and economy_size is None:
@@ -657,7 +673,7 @@ class BeamProjectExportCSVView(LoginRequiredMixin, View):
                 MEMBER_TYPE_LABEL_MAP.get(design.member_type, design.member_type),
                 design.get_material_display(),
                 design.span_display,
-                design.nominal_size,
+                design.section_label,
                 result.governing.name,
                 f"{result.governing.ratio:.3f}",
                 "PASS" if result.passed else "FAIL",
@@ -886,7 +902,8 @@ class BeamDesignExportCSVView(LoginRequiredMixin, View):
             writer.writerow(["Continuous total length (ft)", f"{result.summary.total_length:.3f}"])
             for index, clear_span in enumerate(result.summary.span_segments, start=1):
                 writer.writerow([f"Analysis span B{index}-B{index + 1} (ft)", f"{clear_span:.3f}"])
-        writer.writerow(["Section", f"{design.nominal_size} {result.summary.material_name}"])
+        writer.writerow(["Section", f"{design.section_label} {result.summary.material_name}"])
+        writer.writerow(["Plies", design.plies])
         writer.writerow(["Uniform load basis", design.uniform_load_basis])
         writer.writerow(["Spacing (in)", design.spacing_in])
         entered_unit = "psf" if design.uniform_load_basis == "psf" else "plf"
@@ -925,6 +942,20 @@ class BeamDesignExportCSVView(LoginRequiredMixin, View):
                 f"at {load['location_ft']:g} ft",
             ])
         writer.writerow(["Repetitive", design.repetitive])
+        if design.service_condition == "wet":
+            writer.writerow(["Service condition", "Wet / exterior"])
+            writer.writerow(["CM (Fb, Fv, Fc_perp, E)", (
+                f"{result.summary.cm_fb:.2f}, {result.summary.cm_fv:.2f}, "
+                f"{result.summary.cm_fcperp:.2f}, {result.summary.cm_e:.2f}"
+            )])
+        else:
+            writer.writerow(["Service condition", "Dry / interior (CM = 1.0)"])
+        if design.unbraced_length_ft:
+            writer.writerow(["Unbraced compression edge (ft)", design.unbraced_length_ft])
+            writer.writerow(["Beam stability factor CL", f"{result.summary.cl:.3f}"])
+            writer.writerow(["Slenderness ratio RB", f"{result.summary.rb:.1f}"])
+        else:
+            writer.writerow(["Compression edge bracing", "Continuously braced (CL = 1.0)"])
         defaults = default_deflection_settings(
             design.member_type,
             design.performance_profile,
@@ -1000,7 +1031,7 @@ class BeamDesignExportListCSVView(LoginRequiredMixin, View):
                 MEMBER_TYPE_LABEL_MAP.get(design.member_type, design.member_type),
                 design.get_material_display(),
                 span_label,
-                f"{design.nominal_size} {design.get_material_display()}",
+                f"{design.section_label} {design.get_material_display()}",
                 result.governing.name,
                 f"{result.governing.ratio:.3f}",
                 "PASS" if result.passed else "FAIL",

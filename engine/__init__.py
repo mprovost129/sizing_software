@@ -21,7 +21,15 @@ from .materials import (
     get_material,
     material_choices,
 )
-from .sections import NOMINAL_SIZES, Section
+from .sections import (
+    GLULAM_SIZE_LABELS,
+    GLULAM_SIZES,
+    LVL_SIZE_LABELS,
+    LVL_SIZES,
+    NOMINAL_SIZES,
+    SIZE_LABELS,
+    Section,
+)
 from .span import SPAN_MODE_LABELS, SpanMode, clear_span
 
 __all__ = [
@@ -33,6 +41,11 @@ __all__ = [
     "material_choices",
     "Section",
     "NOMINAL_SIZES",
+    "LVL_SIZES",
+    "LVL_SIZE_LABELS",
+    "GLULAM_SIZES",
+    "GLULAM_SIZE_LABELS",
+    "SIZE_LABELS",
     "UniformLoad",
     "PointLoad",
     "design_beam",

@@ -167,7 +167,7 @@
         </tbody>
     </table>
     <div style="padding:.75rem 1.25rem;font-size:.7rem;color:var(--fc-text-xmuted);border-top:1px solid var(--fc-border);">
-        Bending: f<sub>b</sub> = M/S vs F'<sub>b</sub> = F<sub>b</sub> &times; C<sub>F</sub> &times; C<sub>r</sub> &times; C<sub>D</sub> &nbsp;&middot;&nbsp;
+        Bending: f<sub>b</sub> = M/S vs F'<sub>b</sub> = F<sub>b</sub> &times; C<sub>F</sub> &times; C<sub>r</sub> &times; C<sub>D</sub>{% if result.summary.wet_service %} &times; C<sub>M</sub>{% endif %}{% if result.summary.unbraced_length %} &times; C<sub>L</sub>{% endif %} &nbsp;&middot;&nbsp;
         Shear: f<sub>v</sub> = 1.5V/A vs F'<sub>v</sub> = F<sub>v</sub> &times; C<sub>D</sub> &nbsp;&middot;&nbsp;
         Deflection: 5wL&sup4;/384EI vs L/&Delta; &nbsp;&middot;&nbsp;
         Bearing: R/(b &times; L<sub>b</sub>) vs F<sub>c&perp;</sub> &times; C<sub>b</sub> &nbsp;&middot;&nbsp;

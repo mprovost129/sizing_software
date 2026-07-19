@@ -195,7 +195,7 @@ def _beam_design_story(design, result, styles):
     title = design.name or f"Beam Design #{design.pk}"
     story.append(Paragraph(title, styles["Title"]))
     story.append(Paragraph(
-        f"{design.nominal_size} {result.summary.material_name} &middot; "
+        f"{design.section_label} {result.summary.material_name} &middot; "
         f"{design.get_member_type_display()} &middot; "
         f"Revision {design.revision_number} &middot; Saved {design.created_at:%Y-%m-%d %H:%M}",
         styles["Normal"],
@@ -237,7 +237,7 @@ def _beam_design_story(design, result, styles):
     # ---- Given -------------------------------------------------------
     story.append(Paragraph("Design Basis", section_label_style))
     given_lines = [
-        f"<b>Member:</b> {design.nominal_size} {result.summary.material_name}",
+        f"<b>Member:</b> {design.section_label} {result.summary.material_name}",
         f"<b>Performance target:</b> {design.get_performance_profile_display()}",
         f"<b>Subfloor / floor feel:</b> {design.get_subfloor_profile_display()}",
     ]
@@ -260,6 +260,34 @@ def _beam_design_story(design, result, styles):
         )
     else:
         given_lines.append(f"<b>Span:</b> {result.summary.span:.2f} ft (clear)")
+    if result.summary.unbraced_length:
+        given_lines.append(
+            f"<b>Compression edge:</b> unbraced {result.summary.unbraced_length / 12:.2f} ft "
+            f"(CL = {result.summary.cl:.3f}, RB = {result.summary.rb:.1f}, NDS 3.3.3, "
+            "uniform-load le)",
+        )
+    else:
+        given_lines.append("<b>Compression edge:</b> continuously braced (CL = 1.0)")
+    if result.summary.wet_service:
+        given_lines.append(
+            f"<b>Service condition:</b> wet (NDS-S Table 4A CM: Fb {result.summary.cm_fb:.2f}, "
+            f"Fv {result.summary.cm_fv:.2f}, Fc&perp; {result.summary.cm_fcperp:.2f}, "
+            f"E {result.summary.cm_e:.2f})",
+        )
+    else:
+        given_lines.append("<b>Service condition:</b> dry (CM = 1.0)")
+    if result.summary.material_category == "lvl":
+        given_lines.append(
+            f"<b>LVL:</b> engineered member &mdash; CV = {result.summary.cf:.3f} depth factor "
+            "(not CF), no Cr, dry-service. Generic LVL grade values; confirm your product "
+            "meets this grade.",
+        )
+    elif result.summary.material_category == "glulam":
+        given_lines.append(
+            f"<b>Glulam:</b> engineered member &mdash; volume factor CV = {result.summary.cf:.3f} "
+            f"(NDS 5.3.6), applied as the lesser of CV and CL = {result.summary.cl:.3f}; no Cr, "
+            "dry-service, balanced layup. Generic NDS Table 5A stress-class values.",
+        )
     given_lines.append(
         f"<b>Uniform load input:</b> {design.uniform_load_basis.upper()}"
         + (f" @ {design.spacing_in:g}\" o.c." if design.uniform_load_basis == "psf" else "")
@@ -351,8 +379,11 @@ def _beam_design_story(design, result, styles):
     story.append(Paragraph("Section Properties & Adjustment Factors", section_label_style))
     section = result.summary.section
     story.append(_table([
-        ["A (in^2)", "I (in^4)", "S (in^3)"],
-        [f"{section.A:.3f}", f"{section.I:.3f}", f"{section.S:.3f}"],
+        ["Plies", "Width b (in)", "Depth d (in)", "A (in^2)", "I (in^4)", "S (in^3)"],
+        [
+            f"{section.plies}", f"{section.b:.3f}", f"{section.d:.3f}",
+            f"{section.A:.3f}", f"{section.I:.3f}", f"{section.S:.3f}",
+        ],
     ]))
     story.append(Spacer(1, 10))
 
@@ -364,15 +395,16 @@ def _beam_design_story(design, result, styles):
         ],
     ]))
     story.append(Spacer(1, 8))
+    depth_factor_label = "CF" if result.summary.material_category == "sawn" else "CV"
     story.append(_table([
-        ["CF", "Cr", "Cb (left)", "Cb (right)", "Live limit", "Total limit"],
+        [depth_factor_label, "Cr", "CL", "Cb (left)", "Cb (right)", "Live limit", "Total limit"],
         [
-            f"{result.summary.cf:.2f}", f"{result.summary.cr:.2f}",
+            f"{result.summary.cf:.3f}", f"{result.summary.cr:.2f}", f"{result.summary.cl:.3f}",
             f"{result.summary.cb_left:.2f}", f"{result.summary.cb_right:.2f}",
             f"L/{result.summary.deflection_limit_live:.0f}",
             f"L/{result.summary.deflection_limit_total:.0f}",
         ],
-    ], col_widths=[0.7 * inch, 0.7 * inch, 0.8 * inch, 0.8 * inch, 0.9 * inch, 0.9 * inch]))
+    ], col_widths=[0.65 * inch, 0.65 * inch, 0.65 * inch, 0.8 * inch, 0.8 * inch, 0.85 * inch, 0.85 * inch]))
     story.append(Spacer(1, 10))
 
     # ---- Load combinations ---------------------------------------------
@@ -528,7 +560,7 @@ def render_project_pdf(project, design_results, issue=None) -> bytes:
             Paragraph(escape(design.name or f"Design #{design.pk}"), styles["Normal"]),
             f"R{design.revision_number}",
             design.get_member_type_display(),
-            design.nominal_size,
+            design.section_label,
             design.span_display,
             Paragraph(escape(result.governing.name), styles["Normal"]),
             f"{result.governing.ratio:.3f}",

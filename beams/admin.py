@@ -8,6 +8,6 @@ admin.site.register(BeamProjectIssue)
 
 @admin.register(BeamDesign)
 class BeamDesignAdmin(admin.ModelAdmin):
-    list_display = ("__str__", "user", "member_type", "nominal_size", "span_ft", "created_at")
-    list_filter = ("member_type", "nominal_size", "repetitive")
+    list_display = ("__str__", "user", "member_type", "nominal_size", "plies", "span_ft", "created_at")
+    list_filter = ("member_type", "nominal_size", "plies", "repetitive")
     search_fields = ("name", "user__email")

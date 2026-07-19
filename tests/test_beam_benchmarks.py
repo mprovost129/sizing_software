@@ -14,7 +14,13 @@ from engine.beam import (
     deflection_at,
     max_deflection_between,
 )
-from engine.factors import DEFLECTION_LIMITS, required_bearing_length
+from engine.factors import (
+    DEFLECTION_LIMITS,
+    beam_stability_factor,
+    glulam_volume_factor,
+    required_bearing_length,
+    wet_service_factors,
+)
 from engine.span import clear_span
 
 
@@ -125,6 +131,266 @@ def test_2x10_spf_no2_beam_design_governs_on_bending():
     assert live_combo.cd == pytest.approx(1.0)
     assert live_combo.r1 == pytest.approx(600.0)
     assert live_combo.m_max == pytest.approx(1800.0, rel=1e-3)
+
+
+def test_three_ply_builtup_member_scales_capacity_and_drops_cr():
+    # Same 2x10 SPF No. 2 beam and loads as
+    # test_2x10_spf_no2_beam_design_governs_on_bending, but built up from
+    # 3 plies fastened side by side (a typical multi-ply header).
+    #
+    # A built-up member's section properties scale linearly with the ply
+    # count (total width b = 3 * 1.5 = 4.5 in, depth unchanged):
+    #   A = 4.5 * 9.25          = 41.625 in^2  (3x single ply)
+    #   S = 4.5 * 9.25^2 / 6    = 64.17  in^3  (3x single ply)
+    #   I = 4.5 * 9.25^3 / 12   = 296.79 in^4  (3x single ply)
+    #
+    # The Fb size factor CF is depth-based, so it is unchanged (1.1). The
+    # repetitive-member factor Cr must NOT apply to a built-up member --
+    # it is a single member, not 3+ members spaced o.c. -- so even with
+    # repetitive=True, Cr drops from 1.15 to 1.0.
+    #
+    # Every demand/capacity ratio therefore becomes the single-ply,
+    # Cr-removed value divided by 3:
+    #   Bending: 0.912 * 1.15 / 3 = 0.350   (Cr removed, section x3)
+    #   Shear:            0.481 / 3 = 0.160
+    #   Live deflection:  0.505 / 3 = 0.168
+    #   Total deflection: 0.562 / 3 = 0.187
+    #   Bearing:          0.502 / 3 = 0.167
+    span = 12.0
+    loads = [UniformLoad(w=40, load_type="dead"), UniformLoad(w=60, load_type="live")]
+    single = Section.from_nominal("2x10")
+    builtup = Section.from_nominal("2x10", plies=3)
+
+    # Section properties scale exactly with ply count.
+    assert builtup.plies == 3
+    assert builtup.b == pytest.approx(4.5)
+    assert builtup.d == pytest.approx(single.d)
+    assert builtup.A == pytest.approx(3 * single.A)
+    assert builtup.S == pytest.approx(3 * single.S)
+    assert builtup.I == pytest.approx(3 * single.I)
+    assert builtup.label == "3-ply 2x10"
+
+    result = design_beam(span, loads, builtup, SPF_NO2, repetitive=True)
+
+    # Cr is suppressed for the built-up member even though repetitive=True.
+    assert result.summary.cr == pytest.approx(1.0)
+    assert result.summary.cf == pytest.approx(1.1)
+    assert result.summary.section.plies == 3
+
+    assert result.bending.ratio == pytest.approx(0.350, abs=0.002)
+    assert result.shear.ratio == pytest.approx(0.160, abs=0.002)
+    assert result.deflection_live.ratio == pytest.approx(0.168, abs=0.002)
+    assert result.deflection_total.ratio == pytest.approx(0.187, abs=0.002)
+    assert result.bearing_left.ratio == pytest.approx(0.167, abs=0.002)
+    assert result.passed is True
+
+
+def test_beam_stability_factor_matches_nds_hand_calc():
+    # NDS 3.3.3 worked by hand for a 2x12 (d=11.25, b=1.5) with a 12 ft
+    # (144 in) unbraced compression edge, SPF No. 2 (Emin = 510,000 psi),
+    # governing D+L combination Fb* = 875 psi (CF=1.0, Cr=1.0, CD=1.0):
+    #
+    #   lu/d = 144/11.25 = 12.8  -> 7 <= lu/d <= 14.3
+    #   le   = 1.63*144 + 3*11.25 = 268.47 in
+    #   RB   = sqrt(268.47*11.25 / 1.5^2) = 36.64  (<= 50, OK)
+    #   FbE  = 1.20*510000 / 36.64^2 = 455.9 psi
+    #   FbE/Fb* = 455.9 / 875 = 0.5210
+    #   CL   = (1+0.5210)/1.9 - sqrt[((1.5210)/1.9)^2 - 0.5210/0.95]
+    #        = 0.8005 - 0.3040 = 0.4965
+    stab = beam_stability_factor(144.0, 11.25, 1.5, 510_000, 875.0)
+    assert stab.braced is False
+    assert stab.over_slender is False
+    assert stab.rb == pytest.approx(36.64, abs=0.02)
+    assert stab.fbE == pytest.approx(455.9, abs=0.5)
+    assert stab.cl == pytest.approx(0.4965, abs=0.002)
+
+    # A continuously braced compression edge (lu None/0), or a member no
+    # deeper than it is wide, gets CL = 1.0 with no reduction.
+    assert beam_stability_factor(None, 11.25, 1.5, 510_000, 875.0).cl == 1.0
+    assert beam_stability_factor(0.0, 11.25, 1.5, 510_000, 875.0).cl == 1.0
+    assert beam_stability_factor(144.0, 3.5, 6.0, 510_000, 875.0).cl == 1.0  # d <= b
+
+    # RB above 50 is flagged (invalid per NDS 3.3.3.7), not silently used.
+    assert beam_stability_factor(600.0, 11.25, 1.5, 510_000, 875.0).over_slender is True
+
+
+def test_unbraced_beam_applies_cl_to_bending_and_can_fail():
+    # Same 2x12 SPF No. 2, 12 ft simple span, 40 plf dead + 60 plf live.
+    # With the compression edge continuously braced the bending check
+    # passes; leaving 12 ft of the compression edge unbraced cuts the
+    # bending capacity by CL = 0.4965 and pushes the check past 1.0.
+    span = 12.0
+    loads = [UniformLoad(w=40, load_type="dead"), UniformLoad(w=60, load_type="live")]
+    section = Section.from_nominal("2x12")
+
+    braced = design_beam(span, loads, section, SPF_NO2)
+    assert braced.summary.cl == 1.0
+    assert braced.bending.ratio == pytest.approx(0.780, abs=0.003)
+    assert braced.bending.passed is True
+
+    unbraced = design_beam(span, loads, section, SPF_NO2, unbraced_length=144.0)
+    assert unbraced.summary.cl == pytest.approx(0.4965, abs=0.002)
+    assert unbraced.summary.rb == pytest.approx(36.64, abs=0.02)
+    # Braced ratio divided by CL: 0.780 / 0.4965 = 1.571
+    assert unbraced.bending.ratio == pytest.approx(1.571, abs=0.005)
+    assert unbraced.bending.passed is False
+    assert unbraced.bending.governing_combo == "D+L"
+
+
+def test_wet_service_factors_table_4a():
+    # NDS-S Table 4A wet-service CM for sawn dimension lumber. Fv, Fc_perp,
+    # E, Emin are fixed; Fb is 0.85 unless (Fb)(CF) <= 1150 psi (then 1.0).
+    #   SPF No.2 2x10: Fb*CF = 875*1.1 = 962.5 <= 1150 -> CM,Fb = 1.0
+    #   SPF No.2 2x4:  Fb*CF = 875*1.5 = 1312.5 > 1150 -> CM,Fb = 0.85
+    cm_2x10 = wet_service_factors(875, 1.1)
+    assert cm_2x10.fb == 1.0
+    assert cm_2x10.fv == 0.97
+    assert cm_2x10.fc_perp == 0.67
+    assert cm_2x10.e == 0.90
+    assert cm_2x10.emin == 0.90
+    assert wet_service_factors(875, 1.5).fb == 0.85
+
+
+def test_wet_service_reduces_shear_bearing_and_deflection():
+    # Same repetitive 2x10 SPF No. 2 beam as the dry benchmark, but in wet
+    # service. For a 2x10 (Fb)(CF) <= 1150 so CM,Fb = 1.0 and bending is
+    # unchanged; the other checks scale by 1/CM:
+    #   Shear:            0.481 / 0.97 = 0.496
+    #   Bearing:          0.502 / 0.67 = 0.749
+    #   Live deflection:  0.505 / 0.90 = 0.561   (E reduced 10%)
+    #   Total deflection: 0.562 / 0.90 = 0.624
+    span = 12.0
+    loads = [UniformLoad(w=40, load_type="dead"), UniformLoad(w=60, load_type="live")]
+    section = Section.from_nominal("2x10")
+
+    wet = design_beam(span, loads, section, SPF_NO2, repetitive=True, wet_service=True)
+
+    assert wet.summary.wet_service is True
+    assert wet.summary.cm_fb == 1.0
+    assert wet.summary.cm_fv == 0.97
+    assert wet.summary.cm_fcperp == 0.67
+    assert wet.summary.cm_e == 0.90
+    # Reported base values stay unadjusted; CM is shown as a separate factor.
+    assert wet.summary.fb_base == 875
+    assert wet.summary.fc_perp_base == 425
+
+    assert wet.bending.ratio == pytest.approx(0.912, abs=0.002)   # CM,Fb = 1.0
+    assert wet.shear.ratio == pytest.approx(0.496, abs=0.002)
+    assert wet.bearing_left.ratio == pytest.approx(0.749, abs=0.003)
+    assert wet.deflection_live.ratio == pytest.approx(0.561, abs=0.003)
+    assert wet.deflection_total.ratio == pytest.approx(0.624, abs=0.003)
+
+
+def test_lvl_uses_cv_depth_factor_and_suppresses_cr_and_cm():
+    # 2-ply 2.0E LVL (representative), 14 in deep, 16 ft span, 200 plf dead
+    # + 400 plf live. LVL is engineered: the bending value uses the volume
+    # depth factor CV = (12/d)^0.136 instead of a tabulated CF, the
+    # repetitive factor Cr never applies, and wet service is not modelled
+    # (CM stays 1.0).
+    #
+    #   CV = (12/14)^0.136 = 0.97925
+    #   Section: b = 2*1.75 = 3.5, d = 14 -> S = 3.5*14^2/6 = 114.33 in^3
+    #   M = 600*16^2/8 = 19,200 ft-lb = 230,400 in-lb
+    #   fb = 230400 / 114.33 = 2015.2 psi
+    #   Fb* = 2900 * CV(0.97925) * CD(1.0) = 2839.8 psi
+    #   bending ratio = 2015.2 / 2839.8 = 0.7096
+    material = get_material("lvl_2_0e")
+    assert material.is_lvl is True
+    section = Section.from_nominal("lvl_14", plies=2)
+    assert section.b == pytest.approx(3.5)   # two 1.75" laminations
+    assert section.d == pytest.approx(14.0)
+    assert section.label == '2-ply 14"'
+
+    loads = [UniformLoad(w=200, load_type="dead"), UniformLoad(w=400, load_type="live")]
+    # repetitive=True and wet_service=True are both requested but must be
+    # ignored for an engineered LVL member.
+    result = design_beam(16.0, loads, section, material, repetitive=True, wet_service=True)
+
+    assert result.summary.material_category == "lvl"
+    assert result.summary.cf == pytest.approx(0.97925, abs=0.0002)  # this is CV
+    assert result.summary.cr == 1.0            # Cr never applies to LVL
+    assert result.summary.wet_service is False  # CM not applied to LVL
+    assert result.summary.cm_fb == 1.0
+
+    assert result.bending.governing_combo == "D+L"
+    assert result.bending.ratio == pytest.approx(0.7096, abs=0.002)
+
+
+def test_glulam_volume_factor_matches_nds_5_3_6():
+    # NDS 5.3.6 volume factor CV = (21/L)^0.1 (12/d)^0.1 (5.125/b)^0.1 <= 1.0
+    # for a 5-1/8 x 18 in glulam over a 20 ft length (x = 10, non-SP):
+    #   CV = (21/20 * 12/18 * 5.125/5.125)^0.1 = (0.7)^0.1 = 0.96496
+    assert glulam_volume_factor(20.0, 18.0, 5.125, 0.10) == pytest.approx(0.96496, abs=0.0002)
+    # CV is capped at 1.0 (a short, shallow, narrow member does not get a
+    # bonus above the reference).
+    assert glulam_volume_factor(5.0, 6.0, 3.125, 0.10) == 1.0
+
+
+def test_glulam_uses_volume_factor_and_lesser_of_cv_cl():
+    # 24F-1.8E glulam (balanced), 5-1/8 x 18 in, 20 ft simple span,
+    # 300 plf dead + 500 plf live. Glulam uses the volume factor CV in
+    # place of CF, no Cr, and the LESSER of CV and CL (never both).
+    #
+    #   CV = 0.96496 (above); S = 5.125*18^2/6 = 276.75 in^3
+    #   M = 800*20^2/8 = 40,000 ft-lb = 480,000 in-lb
+    #   fb = 480000 / 276.75 = 1734.4 psi
+    #   Braced (CL = 1.0): F'b = 2400 * min(0.96496, 1.0) = 2315.9 psi
+    #   ratio = 1734.4 / 2315.9 = 0.749
+    material = get_material("gl_24f_1_8e")
+    assert material.is_glulam is True
+    section = Section.from_nominal("gl_5.125x18")
+    assert section.b == pytest.approx(5.125)
+    assert section.d == pytest.approx(18.0)
+    assert section.plies == 1
+    assert section.label == '5-1/8x18"'
+
+    loads = [UniformLoad(w=300, load_type="dead"), UniformLoad(w=500, load_type="live")]
+
+    braced = design_beam(20.0, loads, section, material, repetitive=True, wet_service=True)
+    assert braced.summary.material_category == "glulam"
+    assert braced.summary.cr == 1.0             # Cr never applies to glulam
+    assert braced.summary.wet_service is False  # CM not applied to glulam
+    assert braced.summary.cf == pytest.approx(0.96496, abs=0.0002)  # this is CV
+    assert braced.summary.cl == 1.0
+    assert braced.bending.ratio == pytest.approx(0.749, abs=0.002)
+
+    # Leaving 20 ft unbraced drops CL to 0.931 < CV, so CL now governs the
+    # bending factor (min(CV, CL) = CL), raising the ratio.
+    unbraced = design_beam(20.0, loads, section, material, unbraced_length=240.0)
+    assert unbraced.summary.cl == pytest.approx(0.9308, abs=0.002)
+    assert unbraced.summary.cl < unbraced.summary.cf  # CL is the lesser
+    assert unbraced.bending.ratio == pytest.approx(0.776, abs=0.003)
+
+
+def test_southern_pine_uses_size_specific_fb_and_no_cf():
+    # Southern Pine (NDS-S Table 4B) tabulates Fb per nominal size, so the
+    # size factor CF = 1.0. For SP No. 2 the reference Fb is 1050 psi at
+    # 2x10 and 1200 psi at 2x8 -- different values for different depths,
+    # unlike the CF-scaled species.
+    #
+    # Repetitive 2x10 SP No. 2, 12 ft, 40 plf dead + 60 plf live (D+L):
+    #   fb = 21600 / 21.39 = 1009.8 psi
+    #   F'b = 1050 * CF(1.0) * Cr(1.15) * CD(1.0) = 1207.5 psi
+    #   ratio = 1009.8 / 1207.5 = 0.836
+    material = get_material("sp_no2")
+    assert material.category == "sawn"      # SP is a normal sawn material
+    loads = [UniformLoad(w=40, load_type="dead"), UniformLoad(w=60, load_type="live")]
+
+    r_2x10 = design_beam(12.0, loads, Section.from_nominal("2x10"), material, repetitive=True)
+    assert r_2x10.summary.cf == 1.0          # no size factor for Southern Pine
+    assert r_2x10.summary.fb_base == 1050    # size-specific Fb (2x10)
+    assert r_2x10.summary.cr == pytest.approx(1.15)
+    assert r_2x10.bending.ratio == pytest.approx(0.836, abs=0.002)
+
+    # A different depth pulls a different tabulated Fb (not a CF scaling of
+    # a single base value).
+    r_2x8 = design_beam(12.0, loads, Section.from_nominal("2x8"), material, repetitive=True)
+    assert r_2x8.summary.fb_base == 1200
+    assert r_2x8.summary.cf == 1.0
+
+    # Contrast: SPF No. 2 2x10 still uses the CF framework (CF = 1.1).
+    spf = design_beam(12.0, loads, Section.from_nominal("2x10"), get_material("spf_no2"), repetitive=True)
+    assert spf.summary.cf == pytest.approx(1.1)
 
 
 def test_off_center_point_load_reactions():

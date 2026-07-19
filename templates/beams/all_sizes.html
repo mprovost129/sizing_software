@@ -70,7 +70,7 @@
                     ondblclick="{% if row.passed %}window.location='{% url 'beams:design' %}?size={{ row.nominal }}'{% endif %}"
                     style="{% if row.passed %}cursor:pointer;{% endif %}">
                     <td>
-                        <span class="scan-size">{{ row.nominal }}</span>
+                        <span class="scan-size">{{ row.result.summary.section.label }}</span>
                         {% if row.nominal == economy_size %}
                         <span class="fc-badge fc-badge--pass" style="margin-left:.5rem;font-size:.65rem;">Best</span>
                         {% endif %}

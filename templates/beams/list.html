@@ -120,7 +120,7 @@
                             </span>
                         </div>
                         <div class="design-card-props">
-                            <span class="design-prop"><strong>{{ design.nominal_size }}</strong> {{ design.get_material_display }}</span>
+                            <span class="design-prop"><strong>{{ design.section_label }}</strong> {{ design.get_material_display }}</span>
                             <span class="design-prop"><strong>{{ design.span_display }} ft</strong> {% if design.entered_spans|length > 1 %}spans{% else %}span{% endif %}</span>
                             <span class="design-prop">{{ design.get_member_type_display }}</span>
                             <span class="design-prop">Gov: <strong

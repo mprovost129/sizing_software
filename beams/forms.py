@@ -3,12 +3,18 @@ from django import forms
 from engine import clear_span, default_deflection_settings
 
 from .choices import (
+    ALL_SIZE_CHOICES,
     DEFAULT_MATERIAL,
+    DEFAULT_PLIES,
+    DEFAULT_SERVICE_CONDITION,
     LOAD_TYPE_CHOICES,
+    MATERIAL_CATEGORY,
     MATERIAL_CHOICES,
     MEMBER_TYPE_CHOICES,
-    NOMINAL_SIZE_CHOICES,
     PERFORMANCE_PROFILE_CHOICES,
+    PLY_CHOICES,
+    SERVICE_CONDITION_CHOICES,
+    SIZE_CATEGORY,
     SPAN_MODE_CHOICES,
     SUBFLOOR_PROFILE_CHOICES,
     SUPPORT_TYPE_CHOICES,
@@ -129,13 +135,28 @@ class BeamDesignForm(forms.Form):
         label="Material", choices=MATERIAL_CHOICES, initial=DEFAULT_MATERIAL,
         widget=forms.Select(attrs={"class": "form-select"}),
     )
+    service_condition = forms.ChoiceField(
+        label="Service condition", choices=SERVICE_CONDITION_CHOICES, initial=DEFAULT_SERVICE_CONDITION,
+        required=False,
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
     nominal_size = forms.ChoiceField(
-        label="Member size", choices=NOMINAL_SIZE_CHOICES,
+        label="Member size", choices=ALL_SIZE_CHOICES,
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    plies = forms.TypedChoiceField(
+        label="Plies (built-up)", choices=PLY_CHOICES, coerce=int, initial=DEFAULT_PLIES,
+        required=False, empty_value=DEFAULT_PLIES,
         widget=forms.Select(attrs={"class": "form-select"}),
     )
     repetitive = forms.BooleanField(
         label="Repetitive member (≤ 24\" o.c., 3+ members)", required=False,
         widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
+    )
+    unbraced_length_ft = forms.FloatField(
+        label="Unbraced compression edge (ft)", min_value=0, required=False,
+        help_text="Blank = compression edge continuously braced (CL = 1.0).",
+        widget=forms.NumberInput(attrs={"class": "form-control", "placeholder": "Continuously braced"}),
     )
     bearing_length_left_in = forms.FloatField(
         label="Bearing length B1 (left, in)", min_value=0.5, initial=1.5,
@@ -268,6 +289,32 @@ class BeamDesignForm(forms.Form):
             self.add_error("bearing_length_mid_2_in", "Enter the second interior support bearing length for 3-span mode.")
         if cleaned.get("uniform_load_basis") == "psf" and not cleaned.get("spacing_in"):
             self.add_error("spacing_in", "Enter on-center spacing for psf load conversion.")
+        # Material and member size must belong to the same category: LVL
+        # materials use LVL depths, sawn materials use sawn sizes. The UI
+        # keeps these in sync; this guards against a mismatched POST (which
+        # would otherwise compute a nonsensical section) and keeps wet
+        # service out of LVL (its wet values are not modelled).
+        material = cleaned.get("material")
+        nominal_size = cleaned.get("nominal_size")
+        if material and nominal_size:
+            material_cat = MATERIAL_CATEGORY.get(material, "sawn")
+            size_cat = SIZE_CATEGORY.get(nominal_size, "sawn")
+            cat_label = {"sawn": "sawn-lumber", "lvl": "LVL", "glulam": "glulam"}
+            if material_cat != size_cat:
+                self.add_error(
+                    "nominal_size",
+                    f"A {cat_label[material_cat]} material needs a {cat_label[material_cat]} size.",
+                )
+            # LVL and glulam are modelled dry-service only.
+            if material_cat in ("lvl", "glulam") and cleaned.get("service_condition") == "wet":
+                self.add_error(
+                    "service_condition",
+                    f"Wet-service {cat_label[material_cat]} values are not modelled; "
+                    "use a dry service condition or a sawn material.",
+                )
+            # Glulam is a monolithic section, not a built-up member.
+            if material_cat == "glulam" and cleaned.get("plies", 1) and cleaned["plies"] > 1:
+                cleaned["plies"] = 1
         # Deflection limits are left as-is here (None when blank). Blanks
         # are resolved to the member-type default at use time: the view
         # resolves them for the live run, and BeamDesign.compute_result

@@ -4,6 +4,7 @@ from django.conf import settings
 from django.db import models
 
 from engine import (
+    SIZE_LABELS,
     PointLoad,
     Section,
     UniformLoad,
@@ -14,11 +15,15 @@ from engine import (
 from engine.checks import BeamDesignResult
 
 from .choices import (
+    ALL_SIZE_CHOICES,
     DEFAULT_MATERIAL,
+    DEFAULT_PLIES,
+    DEFAULT_SERVICE_CONDITION,
     MATERIAL_CHOICES,
     MEMBER_TYPE_CHOICES,
-    NOMINAL_SIZE_CHOICES,
     PERFORMANCE_PROFILE_CHOICES,
+    PLY_CHOICES,
+    SERVICE_CONDITION_CHOICES,
     SPAN_MODE_CHOICES,
     SUBFLOOR_PROFILE_CHOICES,
     SUPPORT_TYPE_CHOICES,
@@ -168,8 +173,15 @@ class BeamDesign(models.Model):
     roof_live_load_plf = models.FloatField(default=0)
     wind_load_plf = models.FloatField(default=0)
     material = models.CharField(max_length=20, choices=MATERIAL_CHOICES, default=DEFAULT_MATERIAL)
-    nominal_size = models.CharField(max_length=10, choices=NOMINAL_SIZE_CHOICES)
+    service_condition = models.CharField(
+        max_length=10, choices=SERVICE_CONDITION_CHOICES, default=DEFAULT_SERVICE_CONDITION,
+    )
+    nominal_size = models.CharField(max_length=20, choices=ALL_SIZE_CHOICES)
+    plies = models.PositiveSmallIntegerField(choices=PLY_CHOICES, default=DEFAULT_PLIES)
     repetitive = models.BooleanField(default=False)
+    # Unbraced length of the compression edge, ft. Null/blank means the
+    # compression edge is continuously braced (beam stability factor CL = 1.0).
+    unbraced_length_ft = models.FloatField(null=True, blank=True)
     bearing_length_left_in = models.FloatField(default=1.5)
     bearing_length_mid_in = models.FloatField(null=True, blank=True)
     bearing_length_mid_2_in = models.FloatField(null=True, blank=True)
@@ -204,6 +216,16 @@ class BeamDesign(models.Model):
 
     def __str__(self):
         return self.name or f"{self.nominal_size} beam, {self.span_display} ft"
+
+    @property
+    def section_label(self):
+        """Human section label, prefixed with ply count for built-up
+        members (e.g. "3-ply 2x10"); LVL sizes show their depth label
+        (e.g. '2-ply 11-7/8"') rather than the raw id."""
+        base = SIZE_LABELS.get(self.nominal_size, self.nominal_size)
+        if self.plies and self.plies > 1:
+            return f"{self.plies}-ply {base}"
+        return base
 
     @property
     def entered_spans(self):
@@ -284,13 +306,17 @@ class BeamDesign(models.Model):
                 load_type=load["load_type"],
             ))
 
-        section = Section.from_nominal(self.nominal_size)
+        material = get_material(self.material)
+        # Glulam is a monolithic section (its size id already encodes the
+        # full width), so the ply multiplier never applies to it.
+        plies = 1 if material.is_glulam else self.plies
+        section = Section.from_nominal(self.nominal_size, plies=plies)
         limits = default_deflection_settings(self.member_type, self.performance_profile, self.subfloor_profile)
         return design_beam(
             span=self.span_ft,
             loads=loads,
             section=section,
-            material=get_material(self.material),
+            material=material,
             repetitive=self.repetitive,
             bearing_length_left=self.bearing_length_left_in,
             bearing_length_right=self.bearing_length_right_in,
@@ -310,4 +336,6 @@ class BeamDesign(models.Model):
                 [row["bearing_length_in"] for row in self.support_schedule]
                 if len(self.entered_spans) > 1 else None
             ),
+            unbraced_length=(self.unbraced_length_ft or 0) * 12 or None,
+            wet_service=self.service_condition == "wet",
         )

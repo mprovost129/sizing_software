@@ -49,7 +49,7 @@
             <h1 class="page-title">{{ design.name|default:"Beam Design" }}</h1>
             <p class="page-subtitle">
                 {% if design.project %}<a href="{% url 'beams:project_detail' design.project.pk %}">{{ design.project.name }}</a> &middot; {% endif %}
-                {{ design.nominal_size }} {{ design.get_material_display }} &middot;
+                {{ design.section_label }} {{ design.get_material_display }} &middot;
                 {{ design.span_display }} ft {% if design.entered_spans|length > 1 %}spans{% else %}span{% endif %} &middot;
                 {{ design.get_member_type_display }} &middot;
                 Revision {{ design.revision_number }} &middot; Saved {{ design.created_at|date:"M j, Y" }}
@@ -117,7 +117,7 @@
                     </div>
                     <div class="saved-input-item">
                         <div class="saved-input-label">Member</div>
-                        <div class="saved-input-value">{{ design.nominal_size }} {{ design.get_material_display }}</div>
+                        <div class="saved-input-value">{{ design.section_label }} {{ design.get_material_display }}</div>
                     </div>
                     <div class="saved-input-item">
                         <div class="saved-input-label">Saved</div>
@@ -192,6 +192,26 @@
                     <div class="saved-input-item">
                         <div class="saved-input-label">Repetitive Member</div>
                         <div class="saved-input-value">{% if design.repetitive %}Yes{% else %}No{% endif %}</div>
+                    </div>
+                    <div class="saved-input-item">
+                        <div class="saved-input-label">Service Condition</div>
+                        <div class="saved-input-value">
+                            {% if design.service_condition == 'wet' %}
+                                Wet / exterior &middot; C<sub>M</sub>: F<sub>b</sub>&times;{{ result.summary.cm_fb|floatformat:2 }}, F<sub>v</sub>&times;{{ result.summary.cm_fv|floatformat:2 }}, F<sub>c&perp;</sub>&times;{{ result.summary.cm_fcperp|floatformat:2 }}, E&times;{{ result.summary.cm_e|floatformat:2 }}
+                            {% else %}
+                                Dry / interior (C<sub>M</sub> = 1.0)
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="saved-input-item">
+                        <div class="saved-input-label">Compression Edge Bracing</div>
+                        <div class="saved-input-value">
+                            {% if design.unbraced_length_ft %}
+                                Unbraced {{ design.unbraced_length_ft }} ft &middot; C<sub>L</sub> = {{ result.summary.cl|floatformat:3 }} (R<sub>B</sub> = {{ result.summary.rb|floatformat:1 }})
+                            {% else %}
+                                Continuously braced (C<sub>L</sub> = 1.0)
+                            {% endif %}
+                        </div>
                     </div>
                     <div class="saved-input-item">
                         <div class="saved-input-label">Overhangs</div>

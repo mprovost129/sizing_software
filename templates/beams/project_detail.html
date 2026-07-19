@@ -60,7 +60,7 @@
                 {% for design, result in rows %}
                 <label class="fc-check-group" style="padding:.55rem .7rem;border:1px solid var(--fc-border);border-radius:var(--fc-radius);background:var(--fc-gray-50);">
                     <input type="checkbox" name="design_ids" value="{{ design.pk }}" checked>
-                    <span>{{ design.name|default:"Unnamed design" }} &middot; R{{ design.revision_number }} &middot; {{ design.nominal_size }}</span>
+                    <span>{{ design.name|default:"Unnamed design" }} &middot; R{{ design.revision_number }} &middot; {{ design.section_label }}</span>
                 </label>
                 {% endfor %}
             </div>
@@ -108,7 +108,7 @@
                         <span class="fc-badge fc-badge--{% if result.passed %}pass{% else %}fail{% endif %}">{% if result.passed %}PASS{% else %}FAIL{% endif %}</span>
                     </div>
                     <div class="design-card-props">
-                        <span class="design-prop"><strong>{{ design.nominal_size }}</strong> {{ design.get_material_display }}</span>
+                        <span class="design-prop"><strong>{{ design.section_label }}</strong> {{ design.get_material_display }}</span>
                         <span class="design-prop"><strong>{{ design.span_display }} ft</strong></span>
                         <span class="design-prop">{{ design.get_member_type_display }}</span>
                         <span class="design-prop">Gov: <strong>{{ result.governing.ratio|floatformat:3 }}</strong></span>
