@@ -42,6 +42,60 @@ DEFAULT_MATERIAL = DEFAULT_MATERIAL_ID
 PLY_CHOICES = [(n, f"{n} ply" if n == 1 else f"{n} plies") for n in (1, 2, 3, 4)]
 DEFAULT_PLIES = 1
 
+# Dowel-type fasteners (NDS Chapter 12). Each maps to a representative
+# bending yield strength Fyb (psi) used to pre-fill the connection form.
+FASTENER_TYPE_CHOICES = [
+    ("bolt", "Bolt"),
+    ("lag", "Lag screw"),
+    ("nail", "Common nail"),
+    ("screw", "Wood screw"),
+]
+FASTENER_FYB = {"bolt": 45000, "lag": 45000, "nail": 100000, "screw": 80000}
+DEFAULT_FASTENER = "bolt"
+SHEAR_PLANES_CHOICES = [
+    ("single", "Single shear (2 members)"),
+    ("double", "Double shear (3 members)"),
+]
+CONNECTION_LOADING_CHOICES = [
+    ("lateral", "Lateral (shear)"),
+    ("withdrawal", "Withdrawal (axial)"),
+]
+
+# Load-to-grain direction for dowel bearing strength.
+LOAD_DIRECTION_CHOICES = [
+    ("parallel", "Parallel to grain"),
+    ("perpendicular", "Perpendicular to grain"),
+]
+
+# Load-duration factor CD (NDS Table 2.3.2) as a selectable value.
+CONNECTION_CD_CHOICES = [
+    (0.9, "Dead / permanent (CD = 0.9)"),
+    (1.0, "Occupancy live (CD = 1.0)"),
+    (1.15, "Snow (CD = 1.15)"),
+    (1.25, "Construction (CD = 1.25)"),
+    (1.6, "Wind / seismic (CD = 1.6)"),
+]
+DEFAULT_CONNECTION_CD = 1.0
+
+# Temperature factor Ct (NDS Table 11.3.4): sustained service temperature
+# range for connections. "normal" (T <= 100F) -> Ct = 1.0 (default).
+CONNECTION_TEMPERATURE_CHOICES = [
+    ("normal", "Normal (T ≤ 100°F)"),
+    ("warm", "100°F – 125°F"),
+    ("hot", "125°F – 150°F"),
+]
+DEFAULT_CONNECTION_TEMPERATURE = "normal"
+
+# Long-term deflection creep factor Kcr (NDS 3.5.2): amplifies the
+# sustained (dead) portion of the total-deflection check. 1.0 = immediate
+# elastic only (default). Value stored as float; used by the total check.
+CREEP_FACTOR_CHOICES = [
+    (1.0, "None - immediate deflection only"),
+    (1.5, "Seasoned / dry lumber (Kcr = 1.5)"),
+    (2.0, "Unseasoned or wet service (Kcr = 2.0)"),
+]
+DEFAULT_CREEP_FACTOR = 1.0
+
 # Column end conditions -> effective-length factor Ke (NDS Appendix G,
 # recommended design values). Value is the Ke as a string; the view floats it.
 END_CONDITION_CHOICES = [

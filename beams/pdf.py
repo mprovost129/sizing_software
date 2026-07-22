@@ -27,6 +27,8 @@ from reportlab.platypus import (
     TableStyle,
 )
 
+from engine import get_material
+
 from .load_inputs import entered_uniform_loads_to_plf
 
 PASS_COLOR = colors.HexColor("#16a34a")
@@ -504,8 +506,83 @@ def _page_footer(canvas, doc):
     canvas.restoreState()
 
 
+def _beam_column_story(column, result, styles):
+    """Flowables for a saved beam-column (combined axial + bending) report."""
+    story = []
+    section_label_style = ParagraphStyle(
+        "SectionLabel", parent=styles["Heading3"], textColor=NAVY, spaceAfter=6,
+    )
+    s = result.summary
+
+    story.append(Paragraph(column.name or f"Column Design #{column.pk}", styles["Title"]))
+    story.append(Paragraph(
+        f"{column.section_label} {s.material_name} &middot; {column.height_ft:g} ft beam-column &middot; "
+        f"Saved {column.created_at.strftime('%b %d, %Y')}",
+        styles["Normal"],
+    ))
+    if column.project:
+        story.append(Paragraph(f"<b>Project:</b> {escape(column.project.name)}", styles["Normal"]))
+    story.append(Spacer(1, 6))
+    story.append(_status_badge("PASS" if result.passed else "FAIL", result.passed, styles))
+    story.append(Spacer(1, 10))
+
+    story.append(Paragraph("Design Basis", section_label_style))
+    end_label = dict(column._meta.get_field("end_condition").choices).get(column.end_condition, column.end_condition)
+    lat_label = dict(column._meta.get_field("lateral_load_type").choices).get(
+        column.lateral_load_type, column.lateral_load_type)
+    for line in [
+        f"<b>Section:</b> {column.section_label} {s.material_name}",
+        f"<b>Height:</b> {column.height_ft:g} ft &middot; <b>End condition:</b> {end_label}",
+        f"<b>Axial loads (lb):</b> D {column.dead_load_lb:g}, L {column.live_load_lb:g}, "
+        f"S {column.snow_load_lb:g}, Lr {column.roof_live_load_lb:g}, W {column.wind_load_lb:g}",
+        f"<b>Lateral load:</b> {column.lateral_load_plf:g} plf ({lat_label}) &rarr; "
+        f"M = w&middot;H&sup2;/8 = {s.bending_moment:.0f} in-lb (strong axis)",
+    ]:
+        story.append(Paragraph(line, styles["Normal"]))
+    story.append(Spacer(1, 10))
+
+    story.append(Paragraph("Section &amp; Factors", section_label_style))
+    story.append(_table([
+        ["Plies", "b (in)", "d (in)", "A (in^2)", "Fc base", "Fb base", "Emin"],
+        [f"{s.section.plies}", f"{s.section.b:.3f}", f"{s.section.d:.3f}", f"{s.section.A:.3f}",
+         f"{s.fc_base:.0f}", f"{s.fb_base:.0f}", f"{s.emin:.0f}"],
+    ]))
+    story.append(Spacer(1, 8))
+    story.append(_table([
+        ["CF (Fc)", "CF (Fb)", "c", "Ke", "Slenderness", "CP", "CL", "FcE1"],
+        [f"{s.cf_c:.2f}", f"{s.cf_b:.2f}", f"{s.c_coefficient}", f"{s.ke:g}",
+         f"{s.slenderness:.1f}", f"{s.cp:.3f}", f"{s.cl:.3f}", f"{s.fce1:.0f}"],
+    ]))
+    story.append(Spacer(1, 10))
+
+    story.append(Paragraph("Combined Axial + Bending (NDS 3.9-3)", section_label_style))
+    story.append(Paragraph(
+        "(fc/Fc')^2 + fb / [Fb'(1 - fc/FcE1)] &lt;= 1.0",
+        styles["Normal"],
+    ))
+    story.append(Spacer(1, 4))
+    rows = [["Combo", "CD", "P (lb)", "fc", "Fc'", "fb", "Fb'", "1-fc/FcE1", "Interaction"]]
+    for combo in s.combos:
+        rows.append([
+            combo.name, f"{combo.cd:g}", f"{combo.p:.0f}", f"{combo.fc:.0f}", f"{combo.fc_allow:.0f}",
+            f"{combo.fb:.0f}", f"{combo.fb_allow:.0f}", f"{combo.amplification:.3f}", f"{combo.interaction:.3f}",
+        ])
+    story.append(_table(rows))
+    story.append(Spacer(1, 8))
+    story.append(Paragraph(
+        f"<b>Governing:</b> combined interaction {result.interaction.ratio:.3f} "
+        f"({result.interaction.governing_combo}); axial {result.axial.ratio:.3f}, "
+        f"bending {result.bending.ratio:.3f}. Dry service, uniaxial strong-axis bending.",
+        styles["Normal"],
+    ))
+    return story
+
+
 def _column_design_story(column, result, styles):
-    """Flowables for a saved column / post axial-compression report."""
+    """Flowables for a saved column / post report -- axial-only, or the
+    combined beam-column report when a lateral load is present."""
+    if getattr(result, "interaction", None) is not None:
+        return _beam_column_story(column, result, styles)
     story = []
     section_label_style = ParagraphStyle(
         "SectionLabel", parent=styles["Heading3"], textColor=NAVY, spaceAfter=6,
@@ -585,6 +662,150 @@ def render_column_design_pdf(column, result) -> bytes:
     return buffer.getvalue()
 
 
+def _withdrawal_story(connection, result, styles):
+    """Flowables for a fastener-withdrawal report (NDS 12.2)."""
+    story = []
+    section_label_style = ParagraphStyle(
+        "SectionLabel", parent=styles["Heading3"], textColor=NAVY, spaceAfter=6,
+    )
+    story.append(Paragraph(connection.name or f"Connection Design #{connection.pk}", styles["Title"]))
+    story.append(Paragraph(
+        f"{connection.get_fastener_type_display()} &middot; {connection.diameter_in:g} in dia &middot; "
+        f"withdrawal (axial) &middot; Saved {connection.created_at.strftime('%b %d, %Y')}",
+        styles["Normal"],
+    ))
+    if connection.project:
+        story.append(Paragraph(f"<b>Project:</b> {escape(connection.project.name)}", styles["Normal"]))
+    story.append(Spacer(1, 6))
+    if not result.applicable:
+        story.append(Paragraph(
+            "<b>Not applicable:</b> bolts are not designed for withdrawal. Use a nail, "
+            "wood screw, or lag screw.", styles["Normal"]))
+        return story
+    if result.demand:
+        story.append(_status_badge("PASS" if result.passed else "FAIL", result.passed, styles))
+        story.append(Spacer(1, 10))
+
+    story.append(Paragraph("Withdrawal Design (NDS 12.2)", section_label_style))
+    for line in [
+        f"<b>Fastener:</b> {connection.get_fastener_type_display()}, {connection.diameter_in:g} in dia",
+        f"<b>Holding member:</b> {get_material(connection.main_material).name} "
+        f"(G = {get_material(connection.main_material).G:g}), penetration {result.penetration:g} in",
+        f"<b>Loading:</b> {connection.get_service_condition_display()}"
+        + (", toe-nailed" if connection.toe_nail else "")
+        + (f", {connection.get_temperature_display()}" if connection.temperature != "normal" else "")
+        + f", CD = {connection.load_duration:g}, "
+        f"{connection.n_fasteners} fastener(s)"
+        + (f", applied {connection.load_lb:g} lb" if connection.load_lb else ""),
+    ]:
+        story.append(Paragraph(line, styles["Normal"]))
+    story.append(Spacer(1, 10))
+    story.append(_table([
+        ["W (lb/in)", "Penetration (in)", "W (lb/fast.)", "CD", "CM", "Ctn", "Ct", "W' (lb/fast.)", "Capacity (lb)"],
+        [f"{result.w_per_inch:.1f}", f"{result.penetration:g}", f"{result.w_single:.0f}",
+         f"{result.cd:g}", f"{result.cm:.2f}", f"{result.ctn:.2f}", f"{result.ct:.2f}",
+         f"{result.w_adjusted:.0f}", f"{result.capacity:.0f}"],
+    ]))
+    story.append(Spacer(1, 8))
+    verdict = (f"demand/capacity = {result.demand:.0f}/{result.capacity:.0f} = {result.ratio:.3f}"
+               if result.demand else "reference capacity (no applied load entered)")
+    notes = ""
+    if result.cm < 1:
+        notes += f" CM = {result.cm:.2f} (NDS Table 11.3.3, wet service)."
+    if result.ctn < 1:
+        notes += f" Ctn = {result.ctn:.2f} (NDS 12.5.4, toe-nail)."
+    if result.ct < 1:
+        notes += f" Ct = {result.ct:.2f} (NDS Table 11.3.4, temperature)."
+    story.append(Paragraph(
+        f"<b>W' = W x penetration x CD x CM x Ctn x Ct.</b> {verdict}.{notes}",
+        styles["Normal"],
+    ))
+    return story
+
+
+def _connection_design_story(connection, result, styles):
+    """Flowables for a saved connection report (NDS Chapter 12)."""
+    if getattr(result, "yield_result", None) is None:
+        return _withdrawal_story(connection, result, styles)
+    story = []
+    section_label_style = ParagraphStyle(
+        "SectionLabel", parent=styles["Heading3"], textColor=NAVY, spaceAfter=6,
+    )
+    y = result.yield_result
+    shear = "double shear (3-member)" if result.double_shear else "single shear (2-member)"
+
+    story.append(Paragraph(connection.name or f"Connection Design #{connection.pk}", styles["Title"]))
+    story.append(Paragraph(
+        f"{connection.get_fastener_type_display()} &middot; {connection.diameter_in:g} in dia &middot; "
+        f"{shear} &middot; Saved {connection.created_at.strftime('%b %d, %Y')}",
+        styles["Normal"],
+    ))
+    if connection.project:
+        story.append(Paragraph(f"<b>Project:</b> {escape(connection.project.name)}", styles["Normal"]))
+    story.append(Spacer(1, 6))
+    if result.demand:
+        story.append(_status_badge("PASS" if result.passed else "FAIL", result.passed, styles))
+        story.append(Spacer(1, 10))
+
+    story.append(Paragraph("Design Basis", section_label_style))
+    for line in [
+        f"<b>Fastener:</b> {connection.get_fastener_type_display()}, {connection.diameter_in:g} in dia, "
+        f"Fyb = {connection.fyb_psi:g} psi &middot; {shear}",
+        f"<b>Main member:</b> {get_material(connection.main_material).name}, {connection.main_thickness_in:g} in",
+        f"<b>Side member:</b> {get_material(connection.side_material).name}, {connection.side_thickness_in:g} in",
+        f"<b>Loading:</b> {connection.get_load_direction_display()}, "
+        f"{connection.get_service_condition_display()}"
+        + (", toe-nailed" if connection.toe_nail else "")
+        + (f", {connection.get_temperature_display()}" if connection.temperature != "normal" else "")
+        + f", CD = {connection.load_duration:g}, "
+        f"{connection.n_fasteners} fastener(s)"
+        + (f", applied {connection.load_lb:g} lb" if connection.load_lb else ""),
+    ]:
+        story.append(Paragraph(line, styles["Normal"]))
+    story.append(Spacer(1, 10))
+
+    story.append(Paragraph("Yield-Limit Modes (NDS 12.3)", section_label_style))
+    rows = [["Mode"] + list(y.mode_values.keys())]
+    rows.append(["Z (lb)"] + [f"{v:.0f}" for v in y.mode_values.values()])
+    story.append(_table(rows))
+    story.append(Spacer(1, 8))
+    story.append(_table([
+        ["Z (lb)", "Mode", "Fem", "Fes", "CD", "CM", "Ctn", "Ct", "Cg", "CDelta", "Z' (lb)", "Capacity (lb)"],
+        [f"{result.z:.0f}", result.mode, f"{y.fem:.0f}", f"{y.fes:.0f}",
+         f"{result.cd:g}", f"{result.cm:.2f}", f"{result.ctn:.2f}", f"{result.ct:.2f}", f"{result.cg:.3f}",
+         f"{result.c_delta:.3f}", f"{result.z_adjusted:.0f}", f"{result.capacity:.0f}"],
+    ]))
+    story.append(Spacer(1, 8))
+    verdict = (f"demand/capacity = {result.demand:.0f}/{result.capacity:.0f} = {result.ratio:.3f}"
+               if result.demand else "reference capacity (no applied load entered)")
+    notes = ""
+    if result.cm < 1:
+        notes += f" CM = {result.cm:.2f} (NDS Table 11.3.3, wet service)."
+    if result.ctn < 1:
+        notes += f" Ctn = {result.ctn:.2f} (NDS 12.5.4, toe-nail)."
+    if result.ct < 1:
+        notes += f" Ct = {result.ct:.2f} (NDS Table 11.3.4, temperature)."
+    story.append(Paragraph(
+        f"<b>Governing:</b> mode {result.mode}, Z = {result.z:.0f} lb. {verdict}. "
+        f"Z' = Z x CD x CM x Ctn x Ct x Cg x CDelta.{notes} Edge distance not applied.",
+        styles["Normal"],
+    ))
+    return story
+
+
+def render_connection_design_pdf(connection, result) -> bytes:
+    """Render one saved connection design and its computed result to PDF."""
+    buffer = io.BytesIO()
+    doc = _pdf_document(buffer, connection.name or f"Connection design #{connection.pk}")
+    styles = getSampleStyleSheet()
+    doc.build(
+        _connection_design_story(connection, result, styles),
+        onFirstPage=_page_footer,
+        onLaterPages=_page_footer,
+    )
+    return buffer.getvalue()
+
+
 def render_beam_design_pdf(design, result) -> bytes:
     """Render one saved design and its computed result to PDF bytes."""
     buffer = io.BytesIO()
@@ -598,11 +819,12 @@ def render_beam_design_pdf(design, result) -> bytes:
     return buffer.getvalue()
 
 
-def render_project_pdf(project, design_results, issue=None, column_results=None) -> bytes:
+def render_project_pdf(project, design_results, issue=None, column_results=None, connection_results=None) -> bytes:
     """Render a project cover sheet followed by every full member report.
-    ``column_results`` is an optional list of (ColumnDesign, ColumnResult)
-    for the current package; issue packages (snapshots) stay beams-only."""
+    ``column_results``/``connection_results`` are optional lists for the
+    current package; issue packages (snapshots) stay beams-only."""
     column_results = column_results or []
+    connection_results = connection_results or []
     buffer = io.BytesIO()
     package_label = issue.label if issue else "Current Calculation Package"
     doc = _pdf_document(buffer, f"{project.name} - {package_label}")
@@ -625,6 +847,8 @@ def render_project_pdf(project, design_results, issue=None, column_results=None)
     project_rows.append(["Member designs", str(len(design_results))])
     if column_results:
         project_rows.append(["Columns", str(len(column_results))])
+    if connection_results:
+        project_rows.append(["Connections", str(len(connection_results))])
     if issue:
         project_rows.append(["Issue date", issue.created_at.strftime("%Y-%m-%d %H:%M")])
         prepared_by = issue.created_by.email if issue.created_by else "Unknown"
@@ -632,7 +856,7 @@ def render_project_pdf(project, design_results, issue=None, column_results=None)
     story.append(_table(project_rows, col_widths=[1.4 * inch, 4.8 * inch]))
     story.append(Spacer(1, 14))
 
-    all_results = list(design_results) + list(column_results)
+    all_results = list(design_results) + list(column_results) + list(connection_results)
     passing_count = sum(1 for _, result in all_results if result.passed)
     failing_count = len(all_results) - passing_count
     story.append(_table([
@@ -669,13 +893,41 @@ def render_project_pdf(project, design_results, issue=None, column_results=None)
                 Paragraph(escape(column.name or f"Column #{column.pk}"), styles["Normal"]),
                 column.section_label,
                 f"{column.height_ft:g}",
-                Paragraph(escape(result.compression.name), styles["Normal"]),
-                f"{result.compression.ratio:.3f}",
+                Paragraph(escape(result.governing.name), styles["Normal"]),
+                f"{result.governing.ratio:.3f}",
                 "PASS" if result.passed else "FAIL",
             ])
         story.append(_table(
             column_summary,
             col_widths=[1.3 * inch, 0.9 * inch, 0.8 * inch, 1.9 * inch, 0.6 * inch, 0.6 * inch],
+        ))
+
+    if connection_results:
+        story.append(Spacer(1, 12))
+        story.append(Paragraph("Connections", styles["Heading3"]))
+        conn_summary = [["Connection", "Fastener", "Type", "Z/W (lb)", "Capacity", "Ratio/Status"]]
+        for conn, result in connection_results:
+            if getattr(result, "yield_result", None) is None:  # withdrawal
+                if not result.applicable:
+                    ctype, ref, cap, status = "withdrawal", "n/a", "n/a", "n/a"
+                else:
+                    ctype = "withdrawal"
+                    ref = f"{result.w_per_inch:.1f}/in"
+                    cap = f"{result.capacity:.0f}"
+                    status = f"{result.ratio:.3f}" if result.demand else "ref"
+            else:
+                ctype = "double" if result.double_shear else "single"
+                ref = f"{result.z:.0f}"
+                cap = f"{result.capacity:.0f}"
+                status = f"{result.ratio:.3f}" if result.demand else "ref"
+            conn_summary.append([
+                Paragraph(escape(conn.name or f"Connection #{conn.pk}"), styles["Normal"]),
+                f"{conn.get_fastener_type_display()} {conn.diameter_in:g}\"",
+                ctype, ref, cap, status,
+            ])
+        story.append(_table(
+            conn_summary,
+            col_widths=[1.3 * inch, 1.1 * inch, 0.7 * inch, 0.7 * inch, 0.8 * inch, 0.8 * inch],
         ))
 
     if project.notes:
@@ -706,6 +958,9 @@ def render_project_pdf(project, design_results, issue=None, column_results=None)
     for column, result in column_results:
         story.append(PageBreak())
         story.extend(_column_design_story(column, result, styles))
+    for conn, result in connection_results:
+        story.append(PageBreak())
+        story.extend(_connection_design_story(conn, result, styles))
 
     doc.build(story, onFirstPage=_page_footer, onLaterPages=_page_footer)
     return buffer.getvalue()

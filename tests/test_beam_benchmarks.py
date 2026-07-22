@@ -13,6 +13,7 @@ from engine import (
     Section,
     UniformLoad,
     design_beam,
+    design_beam_column,
     design_column,
     get_material,
 )
@@ -486,6 +487,334 @@ def test_posts_and_timbers_and_4x_sizes():
     )
     assert dl_column.summary.section.A == pytest.approx(3.5 * 5.5)
     assert dl_column.summary.cf_c == pytest.approx(1.1)
+
+
+def test_beam_column_interaction_nds_3_9():
+    # 4x6 DF-L No. 1 (b=3.5, d=5.5, A=19.25, Sx=17.646), 10 ft, Ke=1.0,
+    # unbraced both ways. Axial 3000 lb dead + 1000 lb live; lateral wind
+    # 120 plf about the strong axis (M = 120*10^2/8 = 1500 ft-lb). NDS 3.9.2,
+    # D+W governing the interaction (CD=1.6):
+    #   slenderness = 120/3.5 = 34.29 (weak axis) -> CP small
+    #   fc = 3000/19.25 = 155.8; Fc* = 1550*1.1*1.6 = 2728; CP=0.153 -> Fc'=418
+    #   fc/Fc' = 0.372 -> squared 0.139
+    #   fb = 1500*12/17.646 = 1020; Fb' = 1200*1.3*1.6 = 2496; fb/Fb'=0.409
+    #   FcE1 = 0.822*620000/(120/5.5)^2 = 1071; amp = 1 - 155.8/1071 = 0.854
+    #   interaction = 0.139 + 0.409/0.854 = 0.617
+    section = Section.from_nominal("4x6")
+    result = design_beam_column(
+        {"dead": 3000, "live": 1000}, section, get_material("dfl_no1"),
+        unbraced_length_d=120.0, unbraced_length_b=120.0, ke=1.0,
+        height_ft=10.0, lateral_load_plf=120.0, lateral_load_type="wind",
+    )
+    s = result.summary
+    assert s.cf_c == pytest.approx(1.1)
+    assert s.cf_b == pytest.approx(1.3)
+    assert s.slenderness == pytest.approx(34.286, abs=0.01)
+    assert s.fce1 == pytest.approx(1070.6, abs=1.5)
+
+    # Pure-axial utilization is reported unsquared (governed by D+L), so a
+    # high axial ratio is never masked by the squared interaction term.
+    assert result.axial.governing_combo == "D+L"
+    assert result.axial.ratio == pytest.approx(0.509, abs=0.003)
+    assert result.bending.governing_combo == "D+W"
+    assert result.bending.ratio == pytest.approx(0.409, abs=0.003)
+
+    assert result.interaction.governing_combo == "D+W"
+    assert result.interaction.ratio == pytest.approx(0.617, abs=0.003)
+    assert result.governing is result.interaction
+    assert result.passed is True
+
+    # Adding no lateral load reduces the interaction to the pure column
+    # squared term -- the member with only axial passes on axial alone.
+    axial_only = design_beam_column(
+        {"dead": 3000, "live": 1000}, section, get_material("dfl_no1"),
+        unbraced_length_d=120.0, unbraced_length_b=120.0, ke=1.0,
+        height_ft=10.0, lateral_load_plf=0.0,
+    )
+    assert axial_only.bending.ratio == 0.0
+    assert axial_only.interaction.ratio == pytest.approx(0.509 ** 2, abs=0.003)
+
+
+def test_end_notch_reduces_shear_capacity_nds_3_4_3():
+    # Same repetitive 2x10 SPF No. 2 beam (base shear ratio 0.481). A 2 in
+    # tension-side end notch leaves dn = 9.25 - 2 = 7.25 in. NDS 3.4.3.2(a)
+    # magnifies the shear stress by (d/dn)^2, i.e. an effective capacity
+    # factor (dn/d)^2 = (7.25/9.25)^2 = 0.614:
+    #   notched shear ratio = 0.481 / 0.614 = 0.782
+    span = 12.0
+    loads = [UniformLoad(w=40, load_type="dead"), UniformLoad(w=60, load_type="live")]
+    section = Section.from_nominal("2x10")
+
+    base = design_beam(span, loads, section, SPF_NO2, repetitive=True)
+    notched = design_beam(span, loads, section, SPF_NO2, repetitive=True, end_notch_depth=2.0)
+
+    assert notched.summary.end_notch_depth == 2.0
+    assert notched.summary.notch_dn == pytest.approx(7.25)
+    assert notched.shear.ratio == pytest.approx(0.782, abs=0.002)
+    # Only shear at the notched end is affected; bending is unchanged.
+    assert notched.bending.ratio == pytest.approx(base.bending.ratio, abs=1e-6)
+    assert "end notch" in notched.shear.name
+
+    # A notch through the full depth leaves no section to resist shear.
+    through = design_beam(span, loads, section, SPF_NO2, end_notch_depth=9.25)
+    assert through.shear.ratio == 999.0
+    assert through.shear.passed is False
+
+
+def test_round_hole_net_section_shear_check():
+    # Repetitive 2x10 SPF No. 2 (base shear ratio 0.481, A = 13.875 in^2).
+    # A 2 in round hole leaves net depth dn = 7.25 in (net area 10.875 in^2).
+    # Evaluated at max shear it is the full-section check scaled by the net
+    # area: 0.481 * 13.875/10.875 = 0.613. Placed at 3 ft on the 12 ft span,
+    # the shear there is V = 600 - 100*3 = 300 lb (half of Vmax), so the
+    # check halves to 0.307 -- holes in low-shear zones are not over-penalized.
+    span = 12.0
+    loads = [UniformLoad(w=40, load_type="dead"), UniformLoad(w=60, load_type="live")]
+    section = Section.from_nominal("2x10")
+
+    at_max = design_beam(span, loads, section, SPF_NO2, repetitive=True, hole_diameter=2.0)
+    hole_max = next(c for c in at_max.checks if "hole" in c.name)
+    assert at_max.summary.hole_net_depth == pytest.approx(7.25)
+    assert hole_max.ratio == pytest.approx(0.613, abs=0.002)
+
+    at_3ft = design_beam(span, loads, section, SPF_NO2, repetitive=True, hole_diameter=2.0, hole_location=3.0)
+    hole_3 = next(c for c in at_3ft.checks if "hole" in c.name)
+    assert hole_3.ratio == pytest.approx(0.3065, abs=0.002)
+    assert "3.00 ft" in hole_3.name
+
+    # A hole as deep as the member leaves no section to resist shear.
+    oversize = design_beam(span, loads, section, SPF_NO2, hole_diameter=9.25)
+    hole_big = next(c for c in oversize.checks if "hole" in c.name)
+    assert hole_big.ratio == 999.0
+    assert hole_big.passed is False
+
+
+def test_creep_factor_amplifies_dead_deflection_nds_3_5_2():
+    # Repetitive 2x10 SPF No. 2, 40 plf dead + 60 plf live. Elastic total
+    # deflection = 0.337 in (ratio 0.561). NDS 3.5.2 long-term deflection
+    # amplifies the sustained (dead) portion by Kcr; the dead-only
+    # deflection is 40/100 of the total = 0.135 in, so:
+    #   Kcr = 1.5:  0.337 + 0.5*0.135 = 0.404 in -> ratio 0.674
+    #   Kcr = 2.0:  0.337 + 1.0*0.135 = 0.472 in -> ratio 0.786
+    span = 12.0
+    loads = [UniformLoad(w=40, load_type="dead"), UniformLoad(w=60, load_type="live")]
+    section = Section.from_nominal("2x10")
+
+    base = design_beam(span, loads, section, SPF_NO2, repetitive=True)
+    assert base.deflection_total.ratio == pytest.approx(0.561, abs=0.002)
+
+    k15 = design_beam(span, loads, section, SPF_NO2, repetitive=True, creep_factor=1.5)
+    assert k15.summary.creep_factor == 1.5
+    assert k15.deflection_total.ratio == pytest.approx(0.674, abs=0.003)
+    assert "Kcr=1.5" in k15.deflection_total.name
+    # Only the total (sustained-inclusive) check is affected; live is not.
+    assert k15.deflection_live.ratio == pytest.approx(base.deflection_live.ratio, abs=1e-6)
+
+    k20 = design_beam(span, loads, section, SPF_NO2, repetitive=True, creep_factor=2.0)
+    assert k20.deflection_total.ratio == pytest.approx(0.786, abs=0.003)
+
+
+def test_single_shear_bolt_yield_limit_nds_12_3():
+    # 1/2" bolt, single shear, two Douglas Fir-Larch members (G = 0.50),
+    # main 3.5 in / side 1.5 in, load parallel to grain, Fyb = 45,000 psi.
+    # Fem = Fes = 11,200*0.50 = 5,600 psi. Yield-limit equations (Rd = 4 for
+    # Im/Is, 3.6 for II, 3.2 for III/IV; Ktheta = 1 parallel):
+    #   Im = 2450, Is = 1050, II = 913, IIIm = 1103, IIIs = 615, IV = 716 lb
+    #   Z = min = 615 lb, governed by mode IIIs.
+    from engine import design_connection, single_shear_z
+    from engine.connections import dowel_bearing_strength
+
+    fe = dowel_bearing_strength(0.50, 0.5)
+    assert fe == pytest.approx(5600.0)
+    y = single_shear_z(0.5, 45000, lm=3.5, ls=1.5, fem=fe, fes=fe, angle_deg=0.0)
+    assert y.mode == "IIIs"
+    assert y.z == pytest.approx(614.8, abs=1.0)
+    assert y.mode_values["Im"] == pytest.approx(2450.0, abs=1.0)
+    assert y.mode_values["IV"] == pytest.approx(716.0, abs=1.0)
+
+    # Design wrapper: 4 bolts, CD = 1.0, 2000 lb lateral -> ratio 0.81.
+    r = design_connection(0.5, 45000, 3.5, 1.5, 0.50, 0.50, load_lb=2000, cd=1.0, n_fasteners=4)
+    assert r.z_adjusted == pytest.approx(614.8, abs=1.0)
+    assert r.capacity == pytest.approx(2459.0, abs=4.0)
+    assert r.ratio == pytest.approx(0.813, abs=0.003)
+    assert r.passed is True
+
+    # Perpendicular loading uses a different, lower dowel bearing strength.
+    assert dowel_bearing_strength(0.50, 0.5, perpendicular=True) < fe
+    # Small-diameter dowels (nails) have no grain-angle dependence.
+    assert dowel_bearing_strength(0.42, 0.131) == dowel_bearing_strength(0.42, 0.131, perpendicular=True)
+
+
+def test_connection_group_and_geometry_factors():
+    # Group action factor Cg (NDS 11.3-1): 4 x 1/2" bolts at 3 in spacing,
+    # two DF-L 3.5x5.5 members (A = 19.25, E = 1.6e6, EA = 3.08e7),
+    # gamma = 180000*0.5^1.5. Worked by hand: u = 1.0062, m = 0.8947,
+    # Cg = 0.994. More/closer fasteners in thinner members reduce Cg.
+    from engine.connections import (
+        design_connection,
+        geometry_factor,
+        group_action_factor,
+    )
+
+    ea = 1.6e6 * 19.25
+    assert group_action_factor(4, 3.0, 0.5, ea, ea) == pytest.approx(0.994, abs=0.002)
+    assert group_action_factor(1, 3.0, 0.5, ea, ea) == 1.0
+    ea_thin = 1.4e6 * (1.5 * 3.5)
+    assert group_action_factor(8, 2.5, 0.5, ea_thin, ea_thin) < group_action_factor(4, 3.0, 0.5, ea, ea)
+
+    # Geometry factor CDelta (NDS 12.5.1), 1/2" bolt: full at end >= 7D (3.5)
+    # and spacing >= 4D (2.0); reduced proportionally; below 3.5D end / 3D
+    # spacing it is not permitted (0.0).
+    assert geometry_factor(0.5, 3.5, 2.0) == pytest.approx(1.0)
+    assert geometry_factor(0.5, 2.5, 1.75) == pytest.approx(0.714, abs=0.002)  # end governs
+    assert geometry_factor(0.5, 1.5, 2.0) == 0.0                                # end < 3.5D -> not permitted
+    assert geometry_factor(0.131, 1.0, 0.5) == 1.0                              # nails not reduced here
+
+    # Applied to a connection: Cg drops the capacity from the ungrouped value.
+    grouped = design_connection(
+        0.5, 45000, 3.5, 1.5, 0.50, 0.50, load_lb=2000, cd=1.0, n_fasteners=4,
+        spacing=3.0, end_distance=3.5, ea_main=ea, ea_side=ea,
+    )
+    assert grouped.cg == pytest.approx(0.994, abs=0.002)
+    assert grouped.c_delta == pytest.approx(1.0)
+    assert grouped.z_adjusted == pytest.approx(614.8 * grouped.cg, abs=1.0)
+
+
+def test_double_shear_bolt_yield_limit():
+    # Same 1/2" bolt / DF-L (Fem = Fes = 5600, Fyb = 45000) but in DOUBLE
+    # shear: a 3.5 in main member between two 1.5 in side members. Only four
+    # yield modes apply (Im, Is, IIIs, IV), and Is/IIIs/IV carry a factor of
+    # 2 for the two shear planes:
+    #   Im = 2450, Is = 2100, IIIs = 1230, IV = 1432 lb -> Z = 1230 (IIIs),
+    # exactly twice the single-shear IIIs value (615).
+    from engine import design_connection, double_shear_z, single_shear_z
+    from engine.connections import dowel_bearing_strength
+
+    fe = dowel_bearing_strength(0.50, 0.5)
+    ss = single_shear_z(0.5, 45000, 3.5, 1.5, fe, fe)
+    ds = double_shear_z(0.5, 45000, 3.5, 1.5, fe, fe)
+    assert set(ds.mode_values) == {"Im", "Is", "IIIs", "IV"}
+    assert ds.mode == "IIIs"
+    assert ds.z == pytest.approx(1229.6, abs=1.5)
+    assert ds.z == pytest.approx(2 * ss.z, abs=1.0)  # IIIs governs both -> exactly 2x
+
+    r = design_connection(0.5, 45000, 3.5, 1.5, 0.50, 0.50, load_lb=4000, cd=1.0,
+                          n_fasteners=4, double_shear=True)
+    assert r.double_shear is True
+    assert r.capacity == pytest.approx(4 * 1229.6, abs=6.0)
+    assert r.ratio == pytest.approx(0.813, abs=0.003)
+
+
+def test_withdrawal_design_values_nds_12_2():
+    # NDS 12.2 withdrawal design values W (lb per inch of penetration):
+    #   10d nail   D = 0.148, G = 0.50: W = 1380*0.5^2.5*0.148 = 36.1
+    #   1/4 lag    D = 0.25,  G = 0.50: W = 1800*0.5^1.5*0.25^0.75 = 225.0
+    #   #10 screw  D = 0.19,  G = 0.42: W = 2850*0.42^2*0.19 = 95.5
+    #   bolt: not designed for withdrawal -> 0
+    from engine import design_withdrawal
+    from engine.connections import withdrawal_value
+
+    assert withdrawal_value("nail", 0.50, 0.148) == pytest.approx(36.1, abs=0.2)
+    assert withdrawal_value("lag", 0.50, 0.25) == pytest.approx(225.0, abs=0.5)
+    assert withdrawal_value("screw", 0.42, 0.19) == pytest.approx(95.5, abs=0.3)
+    assert withdrawal_value("bolt", 0.50, 0.5) == 0.0
+
+    # Design: 4 x 10d nails, 1.5 in penetration, CD = 1.0, 150 lb pull.
+    #   W' = 36.1*1.5 = 54.2 lb/nail; capacity = 4*54.2 = 217 lb; ratio 0.69
+    r = design_withdrawal("nail", 0.50, 0.148, penetration=1.5, load_lb=150, cd=1.0, n_fasteners=4)
+    assert r.applicable is True
+    assert r.w_single == pytest.approx(54.2, abs=0.3)
+    assert r.capacity == pytest.approx(216.6, abs=1.5)
+    assert r.ratio == pytest.approx(0.692, abs=0.003)
+    assert r.passed is True
+
+    # Bolts are not designed for withdrawal -> not applicable, fails.
+    b = design_withdrawal("bolt", 0.50, 0.5, penetration=3.5, load_lb=1000, cd=1.0, n_fasteners=2)
+    assert b.applicable is False
+    assert b.passed is False
+
+
+def test_connection_wet_service_factor_nds_11_3_3():
+    # NDS Table 11.3.3 wet service factor CM (wood dry at fabrication,
+    # wet in service): lateral dowels 0.7; withdrawal 0.25 nails/spikes,
+    # 0.7 lag/wood screws. Dry service -> 1.0 in every case.
+    from engine import design_connection, design_withdrawal, wet_service_factor
+
+    assert wet_service_factor("bolt", wet=False) == 1.0
+    assert wet_service_factor("bolt", wet=True) == 0.7                     # lateral
+    assert wet_service_factor("nail", wet=True, withdrawal=True) == 0.25
+    assert wet_service_factor("spike", wet=True, withdrawal=True) == 0.25
+    assert wet_service_factor("lag", wet=True, withdrawal=True) == 0.7
+    assert wet_service_factor("screw", wet=True, withdrawal=True) == 0.7
+    assert wet_service_factor("nail", wet=False, withdrawal=True) == 1.0
+
+    # Lateral: CM = 0.7 scales Z' and the capacity to exactly 70% of dry.
+    dry = design_connection(0.5, 45000, 3.5, 1.5, 0.5, 0.5, 2000, cd=1.0, n_fasteners=4)
+    wet = design_connection(0.5, 45000, 3.5, 1.5, 0.5, 0.5, 2000, cd=1.0, n_fasteners=4, wet=True)
+    assert wet.cm == 0.7
+    assert wet.z == pytest.approx(dry.z)                 # reference Z unchanged
+    assert wet.capacity == pytest.approx(0.7 * dry.capacity, rel=1e-6)
+
+    # Withdrawal: nail CM = 0.25 (severe), lag CM = 0.7.
+    wn = design_withdrawal("nail", 0.50, 0.148, penetration=1.5, load_lb=150, cd=1.0, n_fasteners=4, wet=True)
+    assert wn.cm == 0.25
+    assert wn.capacity == pytest.approx(0.25 * 216.6, abs=1.0)
+    wl = design_withdrawal("lag", 0.50, 0.25, penetration=3.0, load_lb=600, cd=1.0, n_fasteners=2, wet=True)
+    assert wl.cm == 0.7
+
+
+def test_connection_toe_nail_factor_nds_12_5_4():
+    # NDS 12.5.4 toe-nail factor Ctn for nails/spikes: 0.83 lateral,
+    # 0.67 withdrawal. Other fasteners and non-toe-nailed connections: 1.0.
+    from engine import design_connection, design_withdrawal, toe_nail_factor
+
+    assert toe_nail_factor("nail", toe_nail=True) == 0.83                       # lateral
+    assert toe_nail_factor("spike", toe_nail=True, withdrawal=True) == 0.67
+    assert toe_nail_factor("bolt", toe_nail=True) == 1.0                        # not a nail
+    assert toe_nail_factor("nail", toe_nail=False, withdrawal=True) == 1.0      # not toe-nailed
+
+    # Lateral: 16d nail (D = 0.162) in DF-L; Ctn scales Z' to 83% of base.
+    base = design_connection(0.162, 100000, 1.5, 1.5, 0.5, 0.5, 0, cd=1.0, fastener_type="nail")
+    toe = design_connection(0.162, 100000, 1.5, 1.5, 0.5, 0.5, 0, cd=1.0, fastener_type="nail", toe_nail=True)
+    assert base.ctn == 1.0
+    assert toe.ctn == 0.83
+    assert toe.z_adjusted == pytest.approx(0.83 * base.z_adjusted, rel=1e-6)
+
+    # Withdrawal: Ctn = 0.67, and it stacks multiplicatively with wet CM.
+    dry = design_withdrawal("nail", 0.50, 0.162, penetration=1.5, load_lb=0, cd=1.0)
+    tn = design_withdrawal("nail", 0.50, 0.162, penetration=1.5, load_lb=0, cd=1.0, toe_nail=True)
+    assert tn.ctn == 0.67
+    assert tn.w_adjusted == pytest.approx(0.67 * dry.w_adjusted, rel=1e-6)
+    wet_toe = design_withdrawal("nail", 0.50, 0.162, penetration=1.5, load_lb=0, cd=1.0, toe_nail=True, wet=True)
+    assert wet_toe.w_adjusted == pytest.approx(0.25 * 0.67 * dry.w_adjusted, rel=1e-6)
+
+
+def test_connection_temperature_factor_nds_11_3_4():
+    # NDS Table 11.3.4 temperature factor Ct: T <= 100F -> 1.0;
+    # 100-125F -> 0.8 dry / 0.7 wet; 125-150F -> 0.7 dry / 0.5 wet.
+    from engine import design_connection, design_withdrawal, temperature_factor
+
+    assert temperature_factor("normal", wet=False) == 1.0
+    assert temperature_factor("warm", wet=False) == 0.8
+    assert temperature_factor("warm", wet=True) == 0.7
+    assert temperature_factor("hot", wet=False) == 0.7
+    assert temperature_factor("hot", wet=True) == 0.5
+
+    # Lateral: Ct scales Z' and capacity; stacks with wet CM.
+    base = design_connection(0.5, 45000, 3.5, 1.5, 0.5, 0.5, 2000, cd=1.0, n_fasteners=4)
+    warm = design_connection(0.5, 45000, 3.5, 1.5, 0.5, 0.5, 2000, cd=1.0, n_fasteners=4, temperature="warm")
+    assert base.ct == 1.0
+    assert warm.ct == 0.8
+    assert warm.capacity == pytest.approx(0.8 * base.capacity, rel=1e-6)
+    hot_wet = design_connection(0.5, 45000, 3.5, 1.5, 0.5, 0.5, 2000, cd=1.0, n_fasteners=4,
+                                temperature="hot", wet=True)
+    assert hot_wet.ct == 0.5
+    assert hot_wet.cm == 0.7
+    assert hot_wet.capacity == pytest.approx(0.5 * 0.7 * base.capacity, rel=1e-6)
+
+    # Withdrawal: Ct applies the same way.
+    w = design_withdrawal("lag", 0.50, 0.25, penetration=3.0, load_lb=600, cd=1.0, n_fasteners=2, temperature="warm")
+    assert w.ct == 0.8
 
 
 def test_off_center_point_load_reactions():

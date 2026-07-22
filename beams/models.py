@@ -10,24 +10,38 @@ from engine import (
     UniformLoad,
     default_deflection_settings,
     design_beam,
+    design_beam_column,
     design_column,
+    design_connection,
+    design_withdrawal,
     get_material,
 )
 from engine.checks import BeamDesignResult
-from engine.columns import ColumnResult
 
 from .choices import (
     ALL_SIZE_CHOICES,
+    CONNECTION_CD_CHOICES,
+    CONNECTION_LOADING_CHOICES,
+    CONNECTION_TEMPERATURE_CHOICES,
+    CREEP_FACTOR_CHOICES,
+    DEFAULT_CONNECTION_CD,
+    DEFAULT_CONNECTION_TEMPERATURE,
+    DEFAULT_CREEP_FACTOR,
     DEFAULT_END_CONDITION,
+    DEFAULT_FASTENER,
     DEFAULT_MATERIAL,
     DEFAULT_PLIES,
     DEFAULT_SERVICE_CONDITION,
     END_CONDITION_CHOICES,
+    FASTENER_TYPE_CHOICES,
+    LOAD_DIRECTION_CHOICES,
+    LOAD_TYPE_CHOICES,
     MATERIAL_CHOICES,
     MEMBER_TYPE_CHOICES,
     PERFORMANCE_PROFILE_CHOICES,
     PLY_CHOICES,
     SERVICE_CONDITION_CHOICES,
+    SHEAR_PLANES_CHOICES,
     SPAN_MODE_CHOICES,
     SUBFLOOR_PROFILE_CHOICES,
     SUPPORT_TYPE_CHOICES,
@@ -186,6 +200,13 @@ class BeamDesign(models.Model):
     # Unbraced length of the compression edge, ft. Null/blank means the
     # compression edge is continuously braced (beam stability factor CL = 1.0).
     unbraced_length_ft = models.FloatField(null=True, blank=True)
+    # Tension-side end-notch depth, in (0 = no notch). Reduces the shear
+    # capacity at the bearing per NDS 3.4.3.2.
+    end_notch_depth_in = models.FloatField(default=0)
+    # Round-hole diameter, in (0 = no hole), and optional location (ft from
+    # left end). Net-section shear check at the hole; blank location = max shear.
+    hole_diameter_in = models.FloatField(default=0)
+    hole_location_ft = models.FloatField(null=True, blank=True)
     bearing_length_left_in = models.FloatField(default=1.5)
     bearing_length_mid_in = models.FloatField(null=True, blank=True)
     bearing_length_mid_2_in = models.FloatField(null=True, blank=True)
@@ -208,6 +229,8 @@ class BeamDesign(models.Model):
     deflection_limit_total = models.PositiveIntegerField(null=True, blank=True)
     cantilever_deflection_limit_live = models.PositiveIntegerField(null=True, blank=True)
     cantilever_deflection_limit_total = models.PositiveIntegerField(null=True, blank=True)
+    # Long-term deflection creep factor Kcr (NDS 3.5.2); 1.0 = immediate only.
+    creep_factor = models.FloatField(choices=CREEP_FACTOR_CHOICES, default=DEFAULT_CREEP_FACTOR)
     # Each entry: {"p": lb, "location_ft": ft, "load_type": one of the supported load types}
     point_loads = models.JSONField(default=list, blank=True)
     # Additive partial-length loads, stored normalized in plf.
@@ -342,6 +365,10 @@ class BeamDesign(models.Model):
             ),
             unbraced_length=(self.unbraced_length_ft or 0) * 12 or None,
             wet_service=self.service_condition == "wet",
+            end_notch_depth=self.end_notch_depth_in or 0,
+            hole_diameter=self.hole_diameter_in or 0,
+            hole_location=self.hole_location_ft,
+            creep_factor=self.creep_factor or 1.0,
         )
 
 
@@ -368,6 +395,11 @@ class ColumnDesign(models.Model):
     unbraced_length_d_ft = models.FloatField(null=True, blank=True)
     unbraced_length_b_ft = models.FloatField(null=True, blank=True)
     end_condition = models.CharField(max_length=8, choices=END_CONDITION_CHOICES, default=DEFAULT_END_CONDITION)
+    # Beam-column: a lateral uniform load (e.g. wind) producing strong-axis
+    # bending combined with the axial load (NDS 3.9.2). 0 = pure column.
+    lateral_load_plf = models.FloatField(default=0)
+    lateral_load_type = models.CharField(max_length=12, choices=LOAD_TYPE_CHOICES, default="wind")
+    bending_unbraced_length_ft = models.FloatField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -383,23 +415,122 @@ class ColumnDesign(models.Model):
             return f"{self.plies}-ply {base}"
         return base
 
-    def compute_result(self) -> ColumnResult:
+    @property
+    def is_beam_column(self):
+        return bool(self.lateral_load_plf)
+
+    def compute_result(self):
+        """Returns a ColumnResult (pure column) or, when a lateral load is
+        present, a BeamColumnResult (combined axial + bending)."""
         material = get_material(self.material)
         plies = 1 if (material.is_glulam or material.is_timber) else self.plies
         section = Section.from_nominal(self.nominal_size, plies=plies)
         ld_in = (self.unbraced_length_d_ft or self.height_ft) * 12
         lb_in = (self.unbraced_length_b_ft or self.height_ft) * 12
+        axial = {
+            "dead": self.dead_load_lb,
+            "live": self.live_load_lb,
+            "snow": self.snow_load_lb,
+            "roof_live": self.roof_live_load_lb,
+            "wind": self.wind_load_lb,
+        }
+        if self.lateral_load_plf:
+            return design_beam_column(
+                axial, section=section, material=material,
+                unbraced_length_d=ld_in, unbraced_length_b=lb_in, ke=float(self.end_condition),
+                height_ft=self.height_ft, lateral_load_plf=self.lateral_load_plf,
+                lateral_load_type=self.lateral_load_type,
+                bending_unbraced_length=(self.bending_unbraced_length_ft or 0) * 12 or None,
+            )
         return design_column(
-            {
-                "dead": self.dead_load_lb,
-                "live": self.live_load_lb,
-                "snow": self.snow_load_lb,
-                "roof_live": self.roof_live_load_lb,
-                "wind": self.wind_load_lb,
-            },
-            section=section,
-            material=material,
-            unbraced_length_d=ld_in,
-            unbraced_length_b=lb_in,
-            ke=float(self.end_condition),
+            axial, section=section, material=material,
+            unbraced_length_d=ld_in, unbraced_length_b=lb_in, ke=float(self.end_condition),
+        )
+
+
+class ConnectionDesign(models.Model):
+    """A saved single- or double-shear dowel connection design. Stored
+    inputs are the source of truth; the result is recomputed on demand."""
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="connection_designs",
+    )
+    project = models.ForeignKey(
+        BeamProject, on_delete=models.SET_NULL, null=True, blank=True, related_name="connection_designs",
+    )
+    name = models.CharField(max_length=100, blank=True)
+    loading = models.CharField(max_length=12, choices=CONNECTION_LOADING_CHOICES, default="lateral")
+    shear_planes = models.CharField(max_length=8, choices=SHEAR_PLANES_CHOICES, default="single")
+    fastener_type = models.CharField(max_length=10, choices=FASTENER_TYPE_CHOICES, default=DEFAULT_FASTENER)
+    diameter_in = models.FloatField()
+    fyb_psi = models.FloatField()
+    main_material = models.CharField(max_length=20, choices=MATERIAL_CHOICES, default=DEFAULT_MATERIAL)
+    main_thickness_in = models.FloatField()
+    side_material = models.CharField(max_length=20, choices=MATERIAL_CHOICES, default=DEFAULT_MATERIAL)
+    side_thickness_in = models.FloatField()
+    load_direction = models.CharField(max_length=14, choices=LOAD_DIRECTION_CHOICES, default="parallel")
+    toe_nail = models.BooleanField(default=False)
+    service_condition = models.CharField(
+        max_length=10, choices=SERVICE_CONDITION_CHOICES, default=DEFAULT_SERVICE_CONDITION,
+    )
+    temperature = models.CharField(
+        max_length=10, choices=CONNECTION_TEMPERATURE_CHOICES, default=DEFAULT_CONNECTION_TEMPERATURE,
+    )
+    load_duration = models.FloatField(choices=CONNECTION_CD_CHOICES, default=DEFAULT_CONNECTION_CD)
+    n_fasteners = models.PositiveIntegerField(default=1)
+    load_lb = models.FloatField(default=0)
+    fastener_spacing_in = models.FloatField(null=True, blank=True)
+    main_width_in = models.FloatField(null=True, blank=True)
+    side_width_in = models.FloatField(null=True, blank=True)
+    end_distance_in = models.FloatField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.name or f"{self.get_fastener_type_display()} connection"
+
+    def compute_result(self):
+        main_mat = get_material(self.main_material)
+        side_mat = get_material(self.side_material)
+        wet = self.service_condition == "wet"
+        if self.loading == "withdrawal":
+            return design_withdrawal(
+                fastener_type=self.fastener_type,
+                specific_gravity=main_mat.G,
+                diameter=self.diameter_in,
+                penetration=self.main_thickness_in,
+                load_lb=self.load_lb or 0,
+                cd=self.load_duration or 1.0,
+                n_fasteners=self.n_fasteners,
+                wet=wet,
+                toe_nail=self.toe_nail,
+                temperature=self.temperature,
+            )
+        double = self.shear_planes == "double"
+        ea_main = main_mat.E * self.main_thickness_in * self.main_width_in if self.main_width_in else None
+        ea_side = side_mat.E * self.side_thickness_in * self.side_width_in if self.side_width_in else None
+        if ea_side and double:
+            ea_side *= 2
+        return design_connection(
+            diameter=self.diameter_in,
+            fyb=self.fyb_psi,
+            main_thickness=self.main_thickness_in,
+            side_thickness=self.side_thickness_in,
+            main_specific_gravity=main_mat.G,
+            side_specific_gravity=side_mat.G,
+            load_lb=self.load_lb or 0,
+            cd=self.load_duration or 1.0,
+            n_fasteners=self.n_fasteners,
+            perpendicular=self.load_direction == "perpendicular",
+            angle_deg=90.0 if self.load_direction == "perpendicular" else 0.0,
+            spacing=self.fastener_spacing_in or None,
+            end_distance=self.end_distance_in or None,
+            ea_main=ea_main,
+            ea_side=ea_side,
+            double_shear=double,
+            wet=wet,
+            fastener_type=self.fastener_type,
+            toe_nail=self.toe_nail,
+            temperature=self.temperature,
         )

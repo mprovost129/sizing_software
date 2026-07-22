@@ -56,6 +56,12 @@
                 <div style="grid-column:span 2;"><div class="saved-input-label">Axial loads (lb)</div><div class="saved-input-value">
                     D {{ column.dead_load_lb|floatformat:0 }}, L {{ column.live_load_lb|floatformat:0 }}, S {{ column.snow_load_lb|floatformat:0 }}, Lr {{ column.roof_live_load_lb|floatformat:0 }}, W {{ column.wind_load_lb|floatformat:0 }}
                 </div></div>
+                {% if column.is_beam_column %}
+                <div style="grid-column:span 2;"><div class="saved-input-label">Lateral load (beam-column)</div><div class="saved-input-value">
+                    {{ column.lateral_load_plf|floatformat:1 }} plf ({{ column.get_lateral_load_type_display }}) &middot; strong-axis bending
+                    {% if column.bending_unbraced_length_ft %}&middot; compression edge unbraced {{ column.bending_unbraced_length_ft|floatformat:1 }} ft{% else %}&middot; compression edge braced{% endif %}
+                </div></div>
+                {% endif %}
             </div>
         </div>
     </div>

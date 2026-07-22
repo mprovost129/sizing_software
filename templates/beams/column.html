@@ -97,6 +97,27 @@
                         {{ form.unbraced_length_b_ft }}
                     </div>
                 </div>
+
+                <details style="margin-top:0.5rem;" {% if form.lateral_load_plf.value %}open{% endif %}>
+                    <summary style="cursor:pointer;font-size:0.82rem;font-weight:600;">Beam-column: add lateral load (bending) &mdash; NDS 3.9</summary>
+                    <div class="col-grid" style="margin-top:0.5rem;">
+                        <div class="col-field">
+                            <label for="{{ form.lateral_load_plf.id_for_label }}">Lateral load (plf)</label>
+                            {{ form.lateral_load_plf }}
+                            {% for e in form.lateral_load_plf.errors %}<p class="fc-field-error">{{ e }}</p>{% endfor %}
+                            <p style="font-size:0.68rem;color:var(--fc-text-muted);margin:.2rem 0 0;">Uniform lateral load &rarr; M = w&middot;H&sup2;/8 (strong axis). Blank/0 = pure column.</p>
+                        </div>
+                        <div class="col-field">
+                            <label for="{{ form.lateral_load_type.id_for_label }}">Lateral load type</label>
+                            {{ form.lateral_load_type }}
+                        </div>
+                        <div class="col-field">
+                            <label for="{{ form.bending_unbraced_length_ft.id_for_label }}">Bending compression-edge unbraced length (ft)</label>
+                            {{ form.bending_unbraced_length_ft }}
+                            <p style="font-size:0.68rem;color:var(--fc-text-muted);margin:.2rem 0 0;">Blank = braced (C<sub>L</sub> = 1.0), e.g. a sheathed stud.</p>
+                        </div>
+                    </div>
+                </details>
                 {% for e in form.non_field_errors %}<p class="fc-field-error">{{ e }}</p>{% endfor %}
 
                 <div class="col-grid" style="margin-top:0.5rem;align-items:end;">
@@ -133,8 +154,8 @@
                 {% for col in saved_columns %}
                 {% with cr=col.compute_result %}
                 <a href="{% url 'beams:column_detail' col.pk %}" class="design-card" style="border-left:3px solid {% if cr.passed %}var(--fc-pass-border){% else %}var(--fc-fail-border){% endif %};display:flex;justify-content:space-between;align-items:center;padding:0.6rem 0.85rem;">
-                    <span><strong>{{ col.name|default:"Unnamed column" }}</strong> &middot; {{ col.section_label }} {% if col.project %}&middot; {{ col.project.name }}{% endif %}</span>
-                    <span class="fc-badge fc-badge--{% if cr.passed %}pass{% else %}fail{% endif %}">{{ cr.compression.ratio|floatformat:3 }}</span>
+                    <span><strong>{{ col.name|default:"Unnamed column" }}</strong> &middot; {{ col.section_label }}{% if col.is_beam_column %} &middot; beam-column{% endif %} {% if col.project %}&middot; {{ col.project.name }}{% endif %}</span>
+                    <span class="fc-badge fc-badge--{% if cr.passed %}pass{% else %}fail{% endif %}">{{ cr.governing.ratio|floatformat:3 }}</span>
                 </a>
                 {% endwith %}
                 {% endfor %}

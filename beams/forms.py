@@ -4,11 +4,21 @@ from engine import clear_span, default_deflection_settings
 
 from .choices import (
     ALL_SIZE_CHOICES,
+    CONNECTION_CD_CHOICES,
+    CONNECTION_LOADING_CHOICES,
+    CONNECTION_TEMPERATURE_CHOICES,
+    CREEP_FACTOR_CHOICES,
+    DEFAULT_CONNECTION_CD,
+    DEFAULT_CONNECTION_TEMPERATURE,
+    DEFAULT_CREEP_FACTOR,
     DEFAULT_END_CONDITION,
+    DEFAULT_FASTENER,
     DEFAULT_MATERIAL,
     DEFAULT_PLIES,
     DEFAULT_SERVICE_CONDITION,
     END_CONDITION_CHOICES,
+    FASTENER_TYPE_CHOICES,
+    LOAD_DIRECTION_CHOICES,
     LOAD_TYPE_CHOICES,
     MATERIAL_CATEGORY,
     MATERIAL_CHOICES,
@@ -160,6 +170,21 @@ class BeamDesignForm(forms.Form):
         help_text="Blank = compression edge continuously braced (CL = 1.0).",
         widget=forms.NumberInput(attrs={"class": "form-control", "placeholder": "Continuously braced"}),
     )
+    end_notch_depth_in = forms.FloatField(
+        label="End notch depth (in)", min_value=0, required=False,
+        help_text="Tension-side notch at the bearing; reduces shear capacity (NDS 3.4.3). 0 = no notch.",
+        widget=forms.NumberInput(attrs={"class": "form-control", "placeholder": "0 (no notch)"}),
+    )
+    hole_diameter_in = forms.FloatField(
+        label="Round hole diameter (in)", min_value=0, required=False,
+        help_text="Net-section shear check at the hole. 0 = no hole.",
+        widget=forms.NumberInput(attrs={"class": "form-control", "placeholder": "0 (no hole)"}),
+    )
+    hole_location_ft = forms.FloatField(
+        label="Hole location from left (ft)", min_value=0, required=False,
+        help_text="Blank = evaluate at the maximum-shear section (conservative).",
+        widget=forms.NumberInput(attrs={"class": "form-control", "placeholder": "max shear"}),
+    )
     bearing_length_left_in = forms.FloatField(
         label="Bearing length B1 (left, in)", min_value=0.5, initial=1.5,
         widget=forms.NumberInput(attrs={"class": "form-control"}),
@@ -211,6 +236,11 @@ class BeamDesignForm(forms.Form):
     cantilever_deflection_limit_total = forms.IntegerField(
         label="Cantilever total-load limit", min_value=60, required=False,
         widget=forms.NumberInput(attrs={"class": "form-control", "placeholder": "member-type default"}),
+    )
+    creep_factor = forms.TypedChoiceField(
+        label="Long-term creep (Kcr, NDS 3.5.2)", choices=CREEP_FACTOR_CHOICES, coerce=float,
+        initial=DEFAULT_CREEP_FACTOR, required=False, empty_value=DEFAULT_CREEP_FACTOR,
+        widget=forms.Select(attrs={"class": "form-select"}),
     )
 
     def __init__(self, *args, **kwargs):
@@ -388,6 +418,20 @@ class ColumnDesignForm(forms.Form):
         label="End condition (Ke)", choices=END_CONDITION_CHOICES, initial=DEFAULT_END_CONDITION,
         widget=forms.Select(attrs={"class": "fc-select"}),
     )
+    lateral_load_plf = forms.FloatField(
+        label="Lateral load (plf) - beam-column", min_value=0, required=False,
+        help_text="Uniform lateral load producing strong-axis bending (M = w*H^2/8). Blank/0 = pure column.",
+        widget=forms.NumberInput(attrs={"class": "fc-input", "placeholder": "0 (pure column)"}),
+    )
+    lateral_load_type = forms.ChoiceField(
+        label="Lateral load type", choices=LOAD_TYPE_CHOICES, initial="wind", required=False,
+        widget=forms.Select(attrs={"class": "fc-select"}),
+    )
+    bending_unbraced_length_ft = forms.FloatField(
+        label="Bending compression-edge unbraced length (ft)", min_value=0, required=False,
+        help_text="Blank = compression edge braced (CL = 1.0), e.g. a sheathed stud.",
+        widget=forms.NumberInput(attrs={"class": "fc-input", "placeholder": "Braced"}),
+    )
 
     def __init__(self, *args, **kwargs):
         user = kwargs.pop("user", None)
@@ -415,6 +459,94 @@ class ColumnDesignForm(forms.Form):
                 or cleaned.get("wind_load_lb")):
             self.add_error("dead_load_lb", "Enter at least one axial load.")
         return cleaned
+
+
+class ConnectionDesignForm(forms.Form):
+    """Single-shear dowel connection lateral design (NDS Chapter 12)."""
+    fastener_type = forms.ChoiceField(
+        label="Fastener", choices=FASTENER_TYPE_CHOICES, initial=DEFAULT_FASTENER,
+        widget=forms.Select(attrs={"class": "fc-select", "onchange": "prefillFyb()"}),
+    )
+    diameter_in = forms.FloatField(
+        label="Diameter (in)", min_value=0.05, initial=0.5,
+        widget=forms.NumberInput(attrs={"class": "fc-input", "step": "any"}),
+    )
+    fyb_psi = forms.FloatField(
+        label="Bending yield Fyb (psi)", min_value=1000, initial=45000,
+        help_text="Bolt/lag ~45,000; common nail ~100,000; wood screw ~80,000.",
+        widget=forms.NumberInput(attrs={"class": "fc-input", "step": "any"}),
+    )
+    main_material = forms.ChoiceField(
+        label="Main member species", choices=MATERIAL_CHOICES, initial=DEFAULT_MATERIAL,
+        widget=forms.Select(attrs={"class": "fc-select"}),
+    )
+    main_thickness_in = forms.FloatField(
+        label="Main member thickness / penetration (in)", min_value=0.25, initial=3.5,
+        widget=forms.NumberInput(attrs={"class": "fc-input", "step": "any"}),
+    )
+    side_material = forms.ChoiceField(
+        label="Side member species", choices=MATERIAL_CHOICES, initial=DEFAULT_MATERIAL,
+        widget=forms.Select(attrs={"class": "fc-select"}),
+    )
+    side_thickness_in = forms.FloatField(
+        label="Side member thickness (in)", min_value=0.25, initial=1.5,
+        widget=forms.NumberInput(attrs={"class": "fc-input", "step": "any"}),
+    )
+    loading = forms.ChoiceField(
+        label="Loading", choices=CONNECTION_LOADING_CHOICES, initial="lateral",
+        widget=forms.Select(attrs={"class": "fc-select", "onchange": "toggleLoading()"}),
+    )
+    shear_planes = forms.ChoiceField(
+        label="Connection", choices=[("single", "Single shear (2 members)"), ("double", "Double shear (3 members)")],
+        initial="single", widget=forms.Select(attrs={"class": "fc-select"}),
+    )
+    load_direction = forms.ChoiceField(
+        label="Load to grain", choices=LOAD_DIRECTION_CHOICES, initial="parallel",
+        widget=forms.Select(attrs={"class": "fc-select"}),
+    )
+    service_condition = forms.ChoiceField(
+        label="Service condition", choices=SERVICE_CONDITION_CHOICES, initial=DEFAULT_SERVICE_CONDITION,
+        widget=forms.Select(attrs={"class": "fc-select"}),
+    )
+    toe_nail = forms.BooleanField(
+        label="Toe-nailed", required=False,
+        widget=forms.CheckboxInput(attrs={"class": "fc-checkbox"}),
+    )
+    temperature = forms.ChoiceField(
+        label="Service temperature", choices=CONNECTION_TEMPERATURE_CHOICES,
+        initial=DEFAULT_CONNECTION_TEMPERATURE,
+        widget=forms.Select(attrs={"class": "fc-select"}),
+    )
+    load_duration = forms.TypedChoiceField(
+        label="Load duration (CD)", choices=CONNECTION_CD_CHOICES, coerce=float,
+        initial=DEFAULT_CONNECTION_CD, required=False, empty_value=DEFAULT_CONNECTION_CD,
+        widget=forms.Select(attrs={"class": "fc-select"}),
+    )
+    n_fasteners = forms.IntegerField(
+        label="Number of fasteners (in a row)", min_value=1, initial=1,
+        widget=forms.NumberInput(attrs={"class": "fc-input"}),
+    )
+    load_lb = forms.FloatField(
+        label="Applied lateral load (lb)", min_value=0, required=False,
+        widget=forms.NumberInput(attrs={"class": "fc-input", "step": "any"}),
+    )
+    # Optional group-action (Cg) and geometry (CDelta) inputs.
+    fastener_spacing_in = forms.FloatField(
+        label="Spacing in row (in)", min_value=0, required=False,
+        widget=forms.NumberInput(attrs={"class": "fc-input", "step": "any", "placeholder": "Cg / CDelta"}),
+    )
+    main_width_in = forms.FloatField(
+        label="Main member width (in)", min_value=0, required=False,
+        widget=forms.NumberInput(attrs={"class": "fc-input", "step": "any", "placeholder": "for Cg"}),
+    )
+    side_width_in = forms.FloatField(
+        label="Side member width (in)", min_value=0, required=False,
+        widget=forms.NumberInput(attrs={"class": "fc-input", "step": "any", "placeholder": "for Cg"}),
+    )
+    end_distance_in = forms.FloatField(
+        label="End distance (in)", min_value=0, required=False,
+        widget=forms.NumberInput(attrs={"class": "fc-input", "step": "any", "placeholder": "for CDelta"}),
+    )
 
 
 class PointLoadForm(forms.Form):

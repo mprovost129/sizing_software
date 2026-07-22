@@ -1,0 +1,121 @@
+{% extends 'base.html' %}
+
+{% block title %}Connection Designer | FrameCalc{% endblock %}
+
+{% block extra_css %}
+<style>
+.conn-grid { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+.conn-field { margin-bottom:0.85rem; }
+.conn-field label { display:block; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--fc-text-muted); margin-bottom:0.25rem; }
+.stat-row { display:flex; flex-wrap:wrap; gap:0.6rem; margin-top:0.5rem; }
+.stat-pill { background:var(--fc-surface-2, #f4f6f8); border-radius:8px; padding:0.4rem 0.7rem; min-width:70px; }
+.stat-pill .stat-label { font-size:0.64rem; text-transform:uppercase; color:var(--fc-text-muted); }
+.stat-pill .stat-value { font-size:0.95rem; font-weight:600; }
+@media (max-width:720px){ .conn-grid { grid-template-columns:1fr; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <h1 class="page-title"><i class="bi bi-nut"></i> Connection Designer</h1>
+        <p class="page-subtitle">Dowel fastener design per NDS 2018 Chapter 12 &mdash; lateral yield-limit Z (single/double shear, with C<sub>g</sub>/C<sub>&Delta;</sub>) or axial withdrawal W (NDS 12.2).</p>
+    </div>
+
+    <form method="post" action="{% url 'beams:connection' %}">
+        {% csrf_token %}
+        <div class="fc-card">
+            <div class="fc-card-body">
+                <div class="conn-grid">
+                    <div class="conn-field"><label>Loading</label>{{ form.loading }}</div>
+                    <div class="conn-field lateral-only"><label>Connection</label>{{ form.shear_planes }}</div>
+                    <div class="conn-field"><label>Fastener</label>{{ form.fastener_type }}</div>
+                    <div class="conn-field"><label>Diameter (in)</label>{{ form.diameter_in }}{% for e in form.diameter_in.errors %}<p class="fc-field-error">{{ e }}</p>{% endfor %}</div>
+                    <div class="conn-field lateral-only"><label>Bending yield F<sub>yb</sub> (psi)</label>{{ form.fyb_psi }}
+                        <p style="font-size:0.68rem;color:var(--fc-text-muted);margin:.2rem 0 0;">Bolt/lag ~45,000 &middot; common nail ~100,000 &middot; wood screw ~80,000.</p>
+                    </div>
+                    <div class="conn-field lateral-only"><label>Load to grain</label>{{ form.load_direction }}</div>
+                    <div class="conn-field"><label>Main / holding member species</label>{{ form.main_material }}</div>
+                    <div class="conn-field"><label id="mainThicknessLabel">Main thickness / penetration (in)</label>{{ form.main_thickness_in }}{% for e in form.main_thickness_in.errors %}<p class="fc-field-error">{{ e }}</p>{% endfor %}</div>
+                    <div class="conn-field lateral-only"><label>Side member species</label>{{ form.side_material }}</div>
+                    <div class="conn-field lateral-only"><label>Side thickness (in)</label>{{ form.side_thickness_in }}{% for e in form.side_thickness_in.errors %}<p class="fc-field-error">{{ e }}</p>{% endfor %}</div>
+                    <div class="conn-field"><label>Service condition (C<sub>M</sub>)</label>{{ form.service_condition }}</div>
+                    <div class="conn-field"><label>Service temperature (C<sub>t</sub>)</label>{{ form.temperature }}</div>
+                    <div class="conn-field"><label>Load duration (C<sub>D</sub>)</label>{{ form.load_duration }}</div>
+                    <div class="conn-field" style="display:flex;align-items:center;gap:0.4rem;">
+                        {{ form.toe_nail }}<label for="{{ form.toe_nail.id_for_label }}" style="margin:0;text-transform:none;letter-spacing:0;">Toe-nailed (C<sub>tn</sub>, nails/spikes)</label>
+                    </div>
+                    <div class="conn-field"><label>Number of fasteners</label>{{ form.n_fasteners }}{% for e in form.n_fasteners.errors %}<p class="fc-field-error">{{ e }}</p>{% endfor %}</div>
+                    <div class="conn-field"><label id="loadLabel">Applied lateral load (lb)</label>{{ form.load_lb }}</div>
+                </div>
+                <details class="lateral-only" style="margin-top:0.25rem;" {% if form.fastener_spacing_in.value or form.end_distance_in.value %}open{% endif %}>
+                    <summary style="cursor:pointer;font-size:0.82rem;font-weight:600;">Group action (C<sub>g</sub>) &amp; geometry (C<sub>&Delta;</sub>) &mdash; optional</summary>
+                    <div class="conn-grid" style="margin-top:0.5rem;">
+                        <div class="conn-field"><label>Spacing in row (in)</label>{{ form.fastener_spacing_in }}</div>
+                        <div class="conn-field"><label>End distance (in)</label>{{ form.end_distance_in }}</div>
+                        <div class="conn-field"><label>Main member width (in)</label>{{ form.main_width_in }}</div>
+                        <div class="conn-field"><label>Side member width (in)</label>{{ form.side_width_in }}</div>
+                    </div>
+                    <p style="font-size:0.68rem;color:var(--fc-text-muted);margin:0;">C<sub>g</sub> (NDS 11.3-1) needs spacing + member widths (E&middot;A). C<sub>&Delta;</sub> (NDS 12.5.1) needs end distance and/or spacing. Blank = 1.0.</p>
+                </details>
+                {% for e in form.non_field_errors %}<p class="fc-field-error">{{ e }}</p>{% endfor %}
+                <button type="submit" class="fc-btn fc-btn--primary fc-btn--lg" style="margin-top:0.5rem;">
+                    <i class="bi bi-play-fill"></i> Compute Z
+                </button>
+                <div class="conn-grid" style="margin-top:0.75rem;">
+                    <div class="conn-field" style="margin-bottom:0;"><label>Design name (for saving)</label>
+                        <input type="text" name="name" class="fc-input" value="">
+                    </div>
+                    <div class="conn-field" style="margin-bottom:0;"><label>Project (optional)</label>
+                        <select name="project" class="fc-select"><option value="">No project</option>
+                            {% for p in projects %}<option value="{{ p.pk }}">{{ p.name }}</option>{% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div style="display:flex;gap:0.5rem;margin-top:0.75rem;flex-wrap:wrap;">
+                    <button type="submit" name="action" value="run" class="fc-btn fc-btn--primary fc-btn--lg"><i class="bi bi-play-fill"></i> Compute Z</button>
+                    <button type="submit" name="action" value="save" class="fc-btn fc-btn--secondary fc-btn--lg"><i class="bi bi-floppy"></i> Save</button>
+                </div>
+            </div>
+        </div>
+    </form>
+
+    {% if result %}{% include 'beams/_connection_result.html' with result=result %}{% endif %}
+
+    {% if saved_connections %}
+    <div class="fc-card" style="margin-top:1rem;">
+        <div class="fc-card-header"><span class="fc-card-title"><i class="bi bi-archive"></i> Saved Connections</span></div>
+        <div class="fc-card-body">
+            <div style="display:grid;gap:0.5rem;">
+                {% for conn in saved_connections %}
+                {% with cr=conn.compute_result %}
+                <a href="{% url 'beams:connection_detail' conn.pk %}" class="design-card" style="border-left:3px solid {% if cr.demand and not cr.passed %}var(--fc-fail-border){% else %}var(--fc-pass-border){% endif %};display:flex;justify-content:space-between;align-items:center;padding:0.6rem 0.85rem;">
+                    <span><strong>{{ conn.name|default:"Unnamed connection" }}</strong> &middot; {{ conn.get_fastener_type_display }} {{ conn.diameter_in|floatformat:3 }}"{% if conn.project %} &middot; {{ conn.project.name }}{% endif %}</span>
+                    <span class="fc-badge fc-badge--{% if cr.demand and not cr.passed %}fail{% else %}pass{% endif %}">{% if cr.demand %}{{ cr.ratio|floatformat:3 }}{% else %}{{ cr.capacity|floatformat:0 }} lb{% endif %}</span>
+                </a>
+                {% endwith %}
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+const FASTENER_FYB = {bolt: 45000, lag: 45000, nail: 100000, screw: 80000};
+function prefillFyb() {
+    const t = document.getElementById('{{ form.fastener_type.id_for_label }}').value;
+    const fyb = document.getElementById('{{ form.fyb_psi.id_for_label }}');
+    if (fyb && FASTENER_FYB[t] !== undefined) fyb.value = FASTENER_FYB[t];
+}
+function toggleLoading() {
+    const withdrawal = document.getElementById('{{ form.loading.id_for_label }}').value === 'withdrawal';
+    document.querySelectorAll('.lateral-only').forEach(el => { el.style.display = withdrawal ? 'none' : ''; });
+    const loadLabel = document.getElementById('loadLabel');
+    if (loadLabel) loadLabel.textContent = withdrawal ? 'Applied withdrawal load (lb)' : 'Applied lateral load (lb)';
+    const mtl = document.getElementById('mainThicknessLabel');
+    if (mtl) mtl.textContent = withdrawal ? 'Penetration into holding member (in)' : 'Main thickness / penetration (in)';
+}
+document.addEventListener('DOMContentLoaded', toggleLoading);
+</script>
+{% endblock %}

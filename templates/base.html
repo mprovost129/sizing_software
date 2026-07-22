@@ -31,6 +31,9 @@
                     <a href="{% url 'beams:column' %}" class="nav-link {% if request.resolver_match.url_name == 'column' %}active{% endif %}">
                         <i class="bi bi-bricks"></i> Column
                     </a>
+                    <a href="{% url 'beams:connection' %}" class="nav-link {% if request.resolver_match.url_name == 'connection' %}active{% endif %}">
+                        <i class="bi bi-nut"></i> Connection
+                    </a>
                     <a href="{% url 'core:guide' %}" class="nav-link {% if request.resolver_match.url_name == 'guide' %}active{% endif %}">
                         <i class="bi bi-book"></i> Guide
                     </a>

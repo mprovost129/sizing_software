@@ -588,6 +588,46 @@
                         </span>
                         {% for e in form.unbraced_length_ft.errors %}<p class="fc-field-error">{{ e }}</p>{% endfor %}
                     </div>
+                    <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;margin-top:0.1rem;">
+                        <label class="fc-label" for="{{ form.end_notch_depth_in.id_for_label }}" style="margin:0;white-space:nowrap;">
+                            End notch depth (in)
+                        </label>
+                        <input type="number" step="any" min="0" style="max-width:9rem;"
+                               name="{{ form.end_notch_depth_in.html_name }}"
+                               id="{{ form.end_notch_depth_in.id_for_label }}"
+                               class="fc-input {% if form.end_notch_depth_in.errors %}is-invalid{% endif %}"
+                               value="{{ form.end_notch_depth_in.value|default_if_none:'' }}"
+                               placeholder="0 (no notch)">
+                        <span style="font-size:0.72rem;color:var(--fc-text-muted);">
+                            Tension-side notch at the bearing reduces shear capacity by (d<sub>n</sub>/d)&sup2; (NDS 3.4.3). IRC limits end notches to d/4.
+                        </span>
+                        {% for e in form.end_notch_depth_in.errors %}<p class="fc-field-error">{{ e }}</p>{% endfor %}
+                    </div>
+                    <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;margin-top:0.1rem;">
+                        <label class="fc-label" for="{{ form.hole_diameter_in.id_for_label }}" style="margin:0;white-space:nowrap;">
+                            Round hole (in)
+                        </label>
+                        <input type="number" step="any" min="0" style="max-width:7rem;"
+                               name="{{ form.hole_diameter_in.html_name }}"
+                               id="{{ form.hole_diameter_in.id_for_label }}"
+                               class="fc-input {% if form.hole_diameter_in.errors %}is-invalid{% endif %}"
+                               value="{{ form.hole_diameter_in.value|default_if_none:'' }}"
+                               placeholder="0 (no hole)">
+                        <label class="fc-label" for="{{ form.hole_location_ft.id_for_label }}" style="margin:0;white-space:nowrap;">
+                            at (ft)
+                        </label>
+                        <input type="number" step="any" min="0" style="max-width:7rem;"
+                               name="{{ form.hole_location_ft.html_name }}"
+                               id="{{ form.hole_location_ft.id_for_label }}"
+                               class="fc-input {% if form.hole_location_ft.errors %}is-invalid{% endif %}"
+                               value="{{ form.hole_location_ft.value|default_if_none:'' }}"
+                               placeholder="max shear">
+                        <span style="font-size:0.72rem;color:var(--fc-text-muted);">
+                            Net-section shear at the hole: f<sub>v</sub> = 1.5V/(b&middot;d<sub>n</sub>), d<sub>n</sub> = d &minus; hole. Blank location = max shear (conservative).
+                        </span>
+                        {% for e in form.hole_diameter_in.errors %}<p class="fc-field-error">{{ e }}</p>{% endfor %}
+                        {% for e in form.hole_location_ft.errors %}<p class="fc-field-error">{{ e }}</p>{% endfor %}
+                    </div>
                     <p style="font-size:0.72rem;color:var(--fc-text-muted);margin:0;">
                         Double-click any member size to run it immediately. This top strip stays aligned with the preview, closer to the BC Calc workflow.
                     </p>
@@ -1164,8 +1204,16 @@
                                 {% for e in form.cantilever_deflection_limit_total.errors %}<p class="fc-field-error">{{ e }}</p>{% endfor %}
                             </div>
                         </div>
+                        <div class="fc-form-group" style="margin-top:0.5rem;">
+                            <label class="fc-label" for="{{ form.creep_factor.id_for_label }}">Long-term creep (K<sub>cr</sub>, NDS 3.5.2)</label>
+                            <select name="{{ form.creep_factor.html_name }}" id="{{ form.creep_factor.id_for_label }}" class="fc-select">
+                                {% for val, label in form.creep_factor.field.choices %}
+                                <option value="{{ val }}" {% if form.creep_factor.value|stringformat:'s' == val|stringformat:'s' or val == 1.0 and not form.creep_factor.value %}selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
                         <p style="font-size:0.72rem;color:var(--fc-text-muted);margin:0 0 1rem;">
-                            BC Calc treats deflection criteria as a settings choice. Back-span and cantilever limits are independent here; cantilever checks use the common L = 2a convention for the effective tip-check span.
+                            BC Calc treats deflection criteria as a settings choice. Back-span and cantilever limits are independent here; cantilever checks use the common L = 2a convention for the effective tip-check span. When K<sub>cr</sub> is set, the total-load check amplifies the dead-load (sustained) deflection for long-term creep.
                         </p>
                         <hr class="fc-divider">
 

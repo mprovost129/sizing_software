@@ -1,0 +1,73 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ connection.name|default:"Connection Design" }} | FrameCalc{% endblock %}
+
+{% block extra_css %}
+<style>
+.stat-row { display:flex; flex-wrap:wrap; gap:0.6rem; margin-top:0.5rem; }
+.stat-pill { background:var(--fc-surface-2, #f4f6f8); border-radius:8px; padding:0.4rem 0.7rem; min-width:70px; }
+.stat-pill .stat-label { font-size:0.64rem; text-transform:uppercase; color:var(--fc-text-muted); }
+.stat-pill .stat-value { font-size:0.95rem; font-weight:600; }
+.saved-input-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:0.9rem 1.25rem; }
+.saved-input-label { font-size:0.72rem; color:var(--fc-text-muted); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:0.25rem; }
+.saved-input-value { color:var(--fc-gray-900); font-size:0.92rem; }
+@media (max-width:900px){ .saved-input-grid { grid-template-columns:repeat(2,1fr); } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;">
+        <div>
+            <h1 class="page-title">{{ connection.name|default:"Connection Design" }}</h1>
+            <p class="page-subtitle">
+                {% if connection.project %}{{ connection.project.name }} &middot; {% endif %}
+                {{ connection.get_fastener_type_display }} {{ connection.diameter_in|floatformat:3 }}" &middot;
+                {% if connection.loading == 'withdrawal' %}withdrawal (axial){% else %}{{ connection.get_shear_planes_display }}{% endif %} &middot; Saved {{ connection.created_at|date:"M j, Y" }}
+            </p>
+        </div>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+            <a href="{% url 'beams:connection_export_pdf' connection.pk %}" class="fc-btn fc-btn--secondary"><i class="bi bi-file-earmark-pdf"></i> Export PDF</a>
+            <a href="{% url 'beams:connection' %}" class="fc-btn fc-btn--secondary"><i class="bi bi-plus"></i> New Connection</a>
+            <form method="post" action="{% url 'beams:connection_delete' connection.pk %}" onsubmit="return confirm('Delete this connection design?');">
+                {% csrf_token %}
+                <button type="submit" class="fc-btn fc-btn--danger"><i class="bi bi-trash"></i> Delete</button>
+            </form>
+        </div>
+    </div>
+
+    {% include 'beams/_connection_result.html' with result=result %}
+
+    <div class="fc-card" style="margin-top:1rem;">
+        <div class="fc-card-header"><span class="fc-card-title"><i class="bi bi-journal-text"></i> Saved Inputs</span></div>
+        <div class="fc-card-body">
+            <div class="saved-input-grid">
+                <div><div class="saved-input-label">Project</div><div class="saved-input-value">{{ connection.project.name|default:"None" }}</div></div>
+                <div><div class="saved-input-label">Fastener</div><div class="saved-input-value">{{ connection.get_fastener_type_display }} &middot; {{ connection.diameter_in|floatformat:3 }}"</div></div>
+                <div><div class="saved-input-label">Loading</div><div class="saved-input-value">{{ connection.get_loading_display }}{% if connection.loading != 'withdrawal' %} &middot; {{ connection.get_shear_planes_display }}{% endif %}</div></div>
+                <div><div class="saved-input-label">C<sub>D</sub> &middot; fasteners</div><div class="saved-input-value">{{ connection.load_duration }} &middot; {{ connection.n_fasteners }}</div></div>
+                <div><div class="saved-input-label">Applied load</div><div class="saved-input-value">{% if connection.load_lb %}{{ connection.load_lb|floatformat:0 }} lb{% else %}&mdash;{% endif %}</div></div>
+                <div><div class="saved-input-label">Service (C<sub>M</sub>)</div><div class="saved-input-value">{{ connection.get_service_condition_display }}{% if result.cm < 1 %} &middot; C<sub>M</sub> {{ result.cm|floatformat:2 }}{% endif %}{% if connection.toe_nail %} &middot; toe-nailed{% if result.ctn < 1 %} C<sub>tn</sub> {{ result.ctn|floatformat:2 }}{% endif %}{% endif %}</div></div>
+                <div><div class="saved-input-label">Temperature (C<sub>t</sub>)</div><div class="saved-input-value">{{ connection.get_temperature_display }}{% if result.ct < 1 %} &middot; C<sub>t</sub> {{ result.ct|floatformat:2 }}{% endif %}</div></div>
+                {% if connection.loading == 'withdrawal' %}
+                <div><div class="saved-input-label">Holding member</div><div class="saved-input-value">{{ connection.main_material }}</div></div>
+                <div><div class="saved-input-label">Penetration</div><div class="saved-input-value">{{ connection.main_thickness_in|floatformat:2 }}"</div></div>
+                {% else %}
+                <div><div class="saved-input-label">F<sub>yb</sub> &middot; load to grain</div><div class="saved-input-value">{{ connection.fyb_psi|floatformat:0 }} &middot; {{ connection.get_load_direction_display }}</div></div>
+                <div><div class="saved-input-label">Main member</div><div class="saved-input-value">{{ result.yield_result.fem|floatformat:0 }} psi F<sub>e</sub> &middot; {{ connection.main_thickness_in|floatformat:2 }}"</div></div>
+                <div><div class="saved-input-label">Side member</div><div class="saved-input-value">{{ result.yield_result.fes|floatformat:0 }} psi F<sub>e</sub> &middot; {{ connection.side_thickness_in|floatformat:2 }}"</div></div>
+                {% if connection.fastener_spacing_in or connection.end_distance_in %}
+                <div style="grid-column:span 2;"><div class="saved-input-label">Group / geometry</div><div class="saved-input-value">
+                    {% if connection.fastener_spacing_in %}spacing {{ connection.fastener_spacing_in|floatformat:2 }}"{% endif %}{% if connection.end_distance_in %} &middot; end {{ connection.end_distance_in|floatformat:2 }}"{% endif %} &middot; C<sub>g</sub> {{ result.cg|floatformat:3 }} &middot; C<sub>&Delta;</sub> {{ result.c_delta|floatformat:3 }}
+                </div></div>
+                {% endif %}
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div style="margin-top:.75rem;">
+        <a href="{% url 'beams:connection' %}" class="fc-btn fc-btn--ghost"><i class="bi bi-arrow-left"></i> Connection designer</a>
+    </div>
+</div>
+{% endblock %}

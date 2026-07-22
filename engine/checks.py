@@ -169,6 +169,12 @@ class BeamSummary:
     cm_fv: float = 1.0
     cm_fcperp: float = 1.0
     cm_e: float = 1.0
+    end_notch_depth: float = 0.0
+    notch_dn: float = 0.0
+    hole_diameter: float = 0.0
+    hole_location: float | None = None
+    hole_net_depth: float = 0.0
+    creep_factor: float = 1.0
     shear_diagram: DiagramSeries | None = None
     moment_diagram: DiagramSeries | None = None
     deflection_live_diagram: DiagramSeries | None = None
@@ -231,6 +237,10 @@ def design_beam(
     bearing_lengths: list[float] | None = None,
     unbraced_length: float | None = None,
     wet_service: bool = False,
+    end_notch_depth: float = 0.0,
+    hole_diameter: float = 0.0,
+    hole_location: float | None = None,
+    creep_factor: float = 1.0,
     combinations=DEFAULT_COMBINATIONS,
 ) -> BeamDesignResult:
     # `span` is interpreted per `span_mode`; the back span (support to
@@ -296,6 +306,16 @@ def design_beam(
     # depends on CF, so it is resolved here where CF is known.
     wet_applied = wet_service and material.category == "sawn"
     cm = wet_service_factors(material.Fb, cf) if wet_applied else DRY_SERVICE_FACTORS
+    # Tension-side end-notch shear reduction (NDS 3.4.3.2): the remaining
+    # depth dn = d - notch, and the effective shear capacity is scaled by
+    # (dn/d)^2. dn <= 0 (notch through the section) -> zero capacity.
+    notch_dn = section.d - end_notch_depth
+    if end_notch_depth > 0:
+        notch_factor = (notch_dn / section.d) ** 2 if notch_dn > 0 else 0.0
+        notch_label = f"dn = {notch_dn:.2f} in"
+    else:
+        notch_factor = 1.0
+        notch_label = ""
     cantilever_deflection_limit_live = cantilever_deflection_limit_live or deflection_limit_live
     cantilever_deflection_limit_total = cantilever_deflection_limit_total or deflection_limit_total
 
@@ -340,6 +360,12 @@ def design_beam(
         cm_fv=cm.fv,
         cm_fcperp=cm.fc_perp,
         cm_e=cm.e,
+        end_notch_depth=end_notch_depth,
+        notch_dn=notch_dn if end_notch_depth > 0 else 0.0,
+        hole_diameter=hole_diameter,
+        hole_location=hole_location,
+        hole_net_depth=(section.d - hole_diameter) if hole_diameter > 0 else 0.0,
+        creep_factor=creep_factor,
         combos=_combo_summaries(total_length, loads, combinations, support_positions),
         load_zones=[
             {
@@ -382,14 +408,17 @@ def design_beam(
     )
     summary.cl = stability.cl
     summary.rb = stability.rb
-    shear = _governing_shear(total_length, loads, section, material, combinations, support_positions)
+    shear = _governing_shear(
+        total_length, loads, section, material, combinations, support_positions,
+        notch_factor=notch_factor, notch_label=notch_label,
+    )
     bearing_checks = [
         _bearing_check(total_length, loads, section, material, length, i, support_positions)
         for i, length in enumerate(bearing_lengths)
     ]
     live_checks, total_checks = _span_deflection_checks(
         total_length, loads, section, material,
-        deflection_limit_live, deflection_limit_total, support_positions,
+        deflection_limit_live, deflection_limit_total, support_positions, creep_factor,
     )
 
     result = BeamDesignResult(
@@ -405,6 +434,12 @@ def design_beam(
         result.extra_checks.extend(bearing_checks[1:-1])
     result.extra_checks.extend(live_checks[1:])
     result.extra_checks.extend(total_checks[1:])
+
+    if hole_diameter > 0:
+        result.extra_checks.append(_hole_shear_check(
+            total_length, loads, section, material, combinations, support_positions,
+            hole_diameter, hole_location,
+        ))
 
     if left_overhang > 0:
         result.deflection_left_cantilever_live = _transient_cantilever_deflection_check(
@@ -584,16 +619,58 @@ def _governing_bending(total_length, loads, section, material, cf, cr, combinati
     return best, best_stability
 
 
-def _governing_shear(total_length, loads, section, material, combinations, support_positions):
+def _governing_shear(total_length, loads, section, material, combinations, support_positions, notch_factor=1.0, notch_label=""):
+    # A tension-side end notch concentrates shear stress at the re-entrant
+    # corner. Per NDS 3.4.3.2(a) the notched-end shear stress is
+    # fv = (3V)/(2 b dn) x (d/dn), i.e. the full-section fv magnified by
+    # (d/dn)^2. That is applied here as an equivalent capacity reduction
+    # notch_factor = (dn/d)^2, evaluated at the maximum-shear section.
     best = None
+    name = "Shear" + (f" (end notch: {notch_label})" if notch_factor < 1.0 else "")
     for combo in combinations:
         active = _filter(loads, combo.load_types)
         results = beam_mod.analyze(total_length, active, support_positions=support_positions)
         fv = 1.5 * abs(results.v_max) / section.A
+        fv_allow = material.Fv * combo.cd * notch_factor
+        ratio = fv / fv_allow if fv_allow else 999.0
+        if best is None or ratio > best.ratio:
+            best = CheckResult(name, fv, fv_allow, ratio, combo.name, ratio <= 1.0)
+    return best
+
+
+def _hole_shear_check(total_length, loads, section, material, combinations, support_positions, hole_diameter, hole_location):
+    # A round hole reduces the net depth resisting shear at its location.
+    # This is a conservative net-section shear check: fv = 1.5 V / (b * dn)
+    # with dn = d - hole_diameter, using the shear V AT the hole (so a hole
+    # in a low-shear zone near midspan is not over-penalized). Manufacturer
+    # hole charts for engineered lumber may permit larger holes; this is a
+    # simplified rational check, not those tables.
+    net_depth = section.d - hole_diameter
+    loc_label = f"at {hole_location:.2f} ft" if hole_location is not None else "at max shear"
+    name = f"Shear at hole (dia {hole_diameter:.2f} in, {loc_label})"
+    if net_depth <= 0:
+        return CheckResult(
+            name + " -- hole diameter exceeds member depth",
+            demand=hole_diameter, capacity=0.0, ratio=999.0,
+            governing_combo="-", passed=False,
+        )
+    net_area = section.b * net_depth
+    best = None
+    for combo in combinations:
+        active = _filter(loads, combo.load_types)
+        if hole_location is not None:
+            reactions = beam_mod._reactions(total_length, active, support_positions=support_positions)
+            v = beam_mod.shear_at(
+                hole_location, active, total_length=total_length, side="plus",
+                support_positions=support_positions, reactions=reactions,
+            )
+        else:
+            v = beam_mod.analyze(total_length, active, support_positions=support_positions).v_max
+        fv = 1.5 * abs(v) / net_area
         fv_allow = material.Fv * combo.cd
         ratio = fv / fv_allow
         if best is None or ratio > best.ratio:
-            best = CheckResult("Shear", fv, fv_allow, ratio, combo.name, ratio <= 1.0)
+            best = CheckResult(name, fv, fv_allow, ratio, combo.name, ratio <= 1.0)
     return best
 
 
@@ -643,7 +720,27 @@ def _back_span_deflection_check(total_length, loads, section, material, load_typ
     return CheckResult(label, delta, allow, ratio, "/".join(load_types), ratio <= 1.0)
 
 
-def _span_deflection_checks(total_length, loads, section, material, live_limit, total_limit, support_positions):
+def _total_deflection_check(total_length, loads, section, material, total_limit, label, x1, x2, support_positions, creep_factor):
+    all_types = ("dead", "live", "snow", "roof_live", "wind")
+    active = _filter(loads, all_types)
+    back_span = x2 - x1
+    delta = beam_mod.max_deflection_between(total_length, active, material.E, section.I, x1, x2, support_positions)
+    combo = "D+L+S+Lr+W"
+    if creep_factor > 1.0:
+        # NDS 3.5.2 long-term deflection amplifies the SUSTAINED (dead)
+        # portion by Kcr. The elastic total already includes the immediate
+        # dead deflection, so add (Kcr - 1) x the dead-only deflection.
+        dead = _filter(loads, ("dead",))
+        delta_dead = beam_mod.max_deflection_between(total_length, dead, material.E, section.I, x1, x2, support_positions)
+        delta = delta + (creep_factor - 1.0) * delta_dead
+        label = label + f" (long-term, Kcr={creep_factor:g})"
+        combo = "Kcr*D + L+S+Lr+W"
+    allow = (back_span * 12) / total_limit
+    ratio = delta / allow
+    return CheckResult(label, delta, allow, ratio, combo, ratio <= 1.0)
+
+
+def _span_deflection_checks(total_length, loads, section, material, live_limit, total_limit, support_positions, creep_factor=1.0):
     present = _transient_load_types_present(loads)
     labels = {"live": "Live", "snow": "Snow", "roof_live": "Roof live", "wind": "Wind"}
     live_name = "/".join(labels[t] for t in present) + "-load deflection"
@@ -655,9 +752,9 @@ def _span_deflection_checks(total_length, loads, section, material, live_limit, 
             total_length, loads, section, material, present, live_limit,
             live_name + span_label, x1, x2, support_positions,
         ))
-        total_checks.append(_back_span_deflection_check(
-            total_length, loads, section, material, ("dead", "live", "snow", "roof_live", "wind"),
-            total_limit, "Total-load deflection" + span_label, x1, x2, support_positions,
+        total_checks.append(_total_deflection_check(
+            total_length, loads, section, material, total_limit,
+            "Total-load deflection" + span_label, x1, x2, support_positions, creep_factor,
         ))
     live_checks.sort(key=lambda c: c.ratio, reverse=True)
     total_checks.sort(key=lambda c: c.ratio, reverse=True)

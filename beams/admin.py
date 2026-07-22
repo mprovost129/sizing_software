@@ -1,9 +1,22 @@
 from django.contrib import admin
 
-from .models import BeamDesign, BeamProject, BeamProjectIssue, ColumnDesign
+from .models import (
+    BeamDesign,
+    BeamProject,
+    BeamProjectIssue,
+    ColumnDesign,
+    ConnectionDesign,
+)
 
 admin.site.register(BeamProject)
 admin.site.register(BeamProjectIssue)
+
+
+@admin.register(ConnectionDesign)
+class ConnectionDesignAdmin(admin.ModelAdmin):
+    list_display = ("__str__", "user", "fastener_type", "diameter_in", "shear_planes", "created_at")
+    list_filter = ("fastener_type", "shear_planes")
+    search_fields = ("name", "user__email")
 
 
 @admin.register(ColumnDesign)

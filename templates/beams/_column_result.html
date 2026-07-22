@@ -1,3 +1,49 @@
+{% if result.interaction %}
+{% with s=result.summary %}
+<div class="fc-card" style="margin-top:1rem;">
+    <div class="verdict-banner verdict-banner--{% if result.passed %}pass{% else %}fail{% endif %}" style="padding:0.9rem 1.25rem;">
+        <p class="verdict-title">
+            {% if result.passed %}<i class="bi bi-check-circle-fill"></i> PASS{% else %}<i class="bi bi-x-circle-fill"></i> FAIL{% endif %}
+            &mdash; {{ s.section.label }} {{ s.material_name }} &middot; {{ s.height_ft|floatformat:1 }} ft beam-column
+        </p>
+        <p class="verdict-sub" style="font-size:0.8rem;">
+            Combined interaction {{ result.interaction.ratio|floatformat:3 }} ({{ result.interaction.governing_combo }} governs) &middot;
+            axial {{ result.axial.ratio|floatformat:3 }} &middot; bending {{ result.bending.ratio|floatformat:3 }}
+        </p>
+    </div>
+    <div class="fc-card-body">
+        <p style="font-size:0.8rem;margin:0 0 0.5rem;">
+            NDS 3.9-3: (f<sub>c</sub>/F'<sub>c</sub>)<sup>2</sup> + f<sub>b</sub> / [F'<sub>b</sub>(1 &minus; f<sub>c</sub>/F<sub>cE1</sub>)] &le; 1.0
+        </p>
+        <div class="stat-row">
+            <div class="stat-pill"><div class="stat-label">Interaction</div><div class="stat-value">{{ result.interaction.ratio|floatformat:3 }}</div></div>
+            <div class="stat-pill"><div class="stat-label">Axial f<sub>c</sub>/F'<sub>c</sub></div><div class="stat-value">{{ result.axial.ratio|floatformat:3 }}</div></div>
+            <div class="stat-pill"><div class="stat-label">Bending f<sub>b</sub>/F'<sub>b</sub></div><div class="stat-value">{{ result.bending.ratio|floatformat:3 }}</div></div>
+            <div class="stat-pill"><div class="stat-label">C<sub>P</sub></div><div class="stat-value">{{ s.cp|floatformat:3 }}</div></div>
+            <div class="stat-pill"><div class="stat-label">C<sub>L</sub></div><div class="stat-value">{{ s.cl|floatformat:3 }}</div></div>
+            <div class="stat-pill"><div class="stat-label">Slenderness</div><div class="stat-value">{{ s.slenderness|floatformat:1 }}</div></div>
+            <div class="stat-pill"><div class="stat-label">F<sub>cE1</sub> (psi)</div><div class="stat-value">{{ s.fce1|floatformat:0 }}</div></div>
+            <div class="stat-pill"><div class="stat-label">Lateral (plf)</div><div class="stat-value">{{ s.lateral_load_plf|floatformat:0 }}</div></div>
+        </div>
+        <p style="font-size:0.74rem;color:var(--fc-text-muted);margin-top:0.75rem;">
+            Strong-axis bending M = w&middot;H&sup2;/8 = {{ s.bending_moment|floatformat:0 }} in-lb.
+            F<sub>cE1</sub> is the Euler stress in the plane of bending (l<sub>e</sub>/d = {{ s.slenderness|floatformat:1 }}).
+            {% if s.cl == 1.0 %}Compression edge braced (C<sub>L</sub> = 1.0).{% endif %}
+            Dry service; uniaxial (strong-axis) bending.
+        </p>
+        <table class="fc-table" style="margin-top:0.75rem;font-size:0.78rem;">
+            <thead><tr><th>Combo</th><th>C<sub>D</sub></th><th>P (lb)</th><th>f<sub>c</sub></th><th>F'<sub>c</sub></th><th>f<sub>b</sub></th><th>F'<sub>b</sub></th><th>1&minus;f<sub>c</sub>/F<sub>cE1</sub></th><th>Interaction</th></tr></thead>
+            <tbody>
+            {% for combo in s.combos %}
+            <tr><td>{{ combo.name }}</td><td>{{ combo.cd }}</td><td>{{ combo.p|floatformat:0 }}</td><td>{{ combo.fc|floatformat:0 }}</td><td>{{ combo.fc_allow|floatformat:0 }}</td><td>{{ combo.fb|floatformat:0 }}</td><td>{{ combo.fb_allow|floatformat:0 }}</td><td>{{ combo.amplification|floatformat:3 }}</td>
+                <td class="{% if combo.interaction > 1.0 %}check-ratio--fail{% elif combo.interaction > 0.85 %}check-ratio--warn{% else %}check-ratio--pass{% endif %}">{{ combo.interaction|floatformat:3 }}</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endwith %}
+{% else %}
 {% with s=result.summary c=result.compression %}
 <div class="fc-card" style="margin-top:1rem;">
     <div class="verdict-banner verdict-banner--{% if result.passed %}pass{% else %}fail{% endif %}" style="padding:0.9rem 1.25rem;">
@@ -40,3 +86,4 @@
     </div>
 </div>
 {% endwith %}
+{% endif %}

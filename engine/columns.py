@@ -17,7 +17,12 @@ from the same material library as the beam checks; Fc drives the result.
 from dataclasses import dataclass
 
 from .checks import DEFAULT_COMBINATIONS, SectionSummary
-from .factors import SIZE_FACTORS_FC, column_stability_factor
+from .factors import (
+    SIZE_FACTORS_FB,
+    SIZE_FACTORS_FC,
+    beam_stability_factor,
+    column_stability_factor,
+)
 from .materials import Material
 from .sections import Section
 
@@ -168,3 +173,203 @@ def design_column(
         combos=combos,
     )
     return ColumnResult(summary=summary, compression=best)
+
+
+# ---------------------------------------------------------------------------
+# Beam-column: combined axial compression + bending (NDS 2018 Section 3.9.2)
+# ---------------------------------------------------------------------------
+@dataclass
+class BeamColumnComboSummary:
+    name: str
+    cd: float
+    p: float           # axial load, lb
+    fc: float          # axial stress, psi
+    fc_allow: float    # Fc', psi
+    m: float           # bending moment, in-lb
+    fb: float          # bending stress, psi
+    fb_allow: float    # Fb', psi
+    amplification: float  # 1 - fc/FcE1 (P-delta magnifier denominator)
+    interaction: float    # NDS 3.9-3 left-hand side
+
+
+@dataclass
+class BeamColumnSummary:
+    section: SectionSummary
+    material_name: str
+    material_category: str
+    fc_base: float
+    fb_base: float
+    e: float
+    emin: float
+    cf_c: float
+    cf_b: float
+    c_coefficient: float
+    ke: float
+    unbraced_length_d: float
+    unbraced_length_b: float
+    slenderness: float          # governing le/d for the axial (column) check
+    cp: float                   # governing column stability factor
+    cl: float                   # beam stability factor for the bending term
+    fce1: float                 # Euler buckling stress in the plane of bending
+    lateral_load_plf: float
+    bending_moment: float       # M = w*H^2/8, in-lb
+    height_ft: float
+    combos: list
+
+
+@dataclass
+class BeamColumnResult:
+    summary: BeamColumnSummary
+    axial: ColumnCheckResult          # fc / Fc'  (pure axial)
+    bending: ColumnCheckResult        # fb / Fb'  (pure bending)
+    interaction: ColumnCheckResult    # NDS 3.9-3 combined
+
+    @property
+    def passed(self) -> bool:
+        return self.axial.passed and self.bending.passed and self.interaction.passed
+
+    @property
+    def governing(self) -> ColumnCheckResult:
+        return max((self.axial, self.bending, self.interaction), key=lambda c: c.ratio)
+
+
+def _bending_base_and_cf(material, section):
+    """Reference Fb and its size/volume factor for the bending term,
+    matching how the beam checks treat each material family."""
+    if material.is_lvl:
+        return material.Fb, (material.cv_reference_depth / section.d) ** material.cv_exponent
+    if material.fb_by_size:
+        return material.fb_by_size.get(section.nominal, material.Fb), 1.0
+    if material.category == "sawn":
+        return material.Fb, SIZE_FACTORS_FB.get(section.nominal, 1.0)
+    return material.Fb, 1.0  # glulam / timber
+
+
+def design_beam_column(
+    axial_loads: dict,
+    section: Section,
+    material: Material,
+    unbraced_length_d: float,
+    unbraced_length_b: float,
+    ke: float,
+    height_ft: float,
+    lateral_load_plf: float,
+    lateral_load_type: str = "wind",
+    bending_unbraced_length: float | None = None,
+    combinations=DEFAULT_COMBINATIONS,
+) -> BeamColumnResult:
+    """Design a member for combined axial compression and uniaxial (strong
+    axis) bending, per NDS 2018 Section 3.9.2:
+
+        (fc/Fc')^2 + fb / [Fb' (1 - fc/FcE1)] <= 1.0
+
+    The bending comes from a uniform lateral load (e.g. wind on a stud) of
+    ``lateral_load_plf`` over ``height_ft``, giving M = w*H^2/8 about the
+    strong axis. It is added in every load combination that contains
+    ``lateral_load_type``. FcE1 is the Euler buckling stress in the plane of
+    bending (resisted by the depth). ``bending_unbraced_length`` is the
+    compression-edge unbraced length for CL (None = braced, CL = 1.0).
+    """
+    if material.category == "sawn" and not material.fb_by_size:
+        cf_c = SIZE_FACTORS_FC.get(section.nominal, 1.0)
+    else:
+        cf_c = 1.0
+    c_coefficient = 0.9 if material.category in ("lvl", "glulam") else 0.8
+    fb_base, cf_b = _bending_base_and_cf(material, section)
+
+    le_d = ke * unbraced_length_d
+    le_b = ke * unbraced_length_b
+    slenderness = max(le_d / section.d, le_b / section.b)
+    # Euler stress for buckling in the plane of strong-axis bending
+    # (resisted by the depth), NDS 3.9.2.
+    fce1 = 0.822 * material.Emin / (le_d / section.d) ** 2
+
+    bending_moment = lateral_load_plf * height_ft ** 2 / 8.0 * 12.0  # in-lb
+
+    combos = []
+    axial_best = None
+    bending_best = None
+    interaction_best = None
+    governing_cp = 1.0
+    governing_cl = 1.0
+    for combo in combinations:
+        p = sum(axial_loads.get(t, 0) or 0 for t in combo.load_types)
+        has_lateral = lateral_load_plf > 0 and lateral_load_type in combo.load_types
+        if p <= 0 and not has_lateral:
+            continue
+
+        fc = p / section.A
+        fc_star = material.Fc * cf_c * combo.cd
+        col_stab = column_stability_factor(slenderness, material.Emin, fc_star, c_coefficient)
+        fc_allow = fc_star * col_stab.cp
+        axial_ratio = fc / fc_allow if fc_allow else 0.0
+
+        m = bending_moment if has_lateral else 0.0
+        fb = m / section.S if m else 0.0
+        fb_star = fb_base * cf_b * combo.cd
+        beam_stab = beam_stability_factor(bending_unbraced_length, section.d, section.b, material.Emin, fb_star)
+        fb_allow = fb_star * beam_stab.cl
+        bending_ratio = fb / fb_allow if (m and fb_allow) else 0.0
+
+        amplification = 1.0 - fc / fce1
+        if amplification <= 0:
+            # fc has reached the Euler buckling stress in the plane of
+            # bending: the member is unstable. Force a loud failure.
+            interaction = 999.0
+        else:
+            interaction = axial_ratio ** 2 + (bending_ratio / amplification if fb else 0.0)
+
+        combos.append(BeamColumnComboSummary(
+            name=combo.name, cd=combo.cd, p=p, fc=fc, fc_allow=fc_allow,
+            m=m, fb=fb, fb_allow=fb_allow, amplification=amplification, interaction=interaction,
+        ))
+        if axial_best is None or axial_ratio > axial_best.ratio:
+            axial_best = ColumnCheckResult("Axial compression", fc, fc_allow, axial_ratio, combo.name, axial_ratio <= 1.0)
+            governing_cp = col_stab.cp
+        if m and (bending_best is None or bending_ratio > bending_best.ratio):
+            bending_best = ColumnCheckResult("Bending", fb, fb_allow, bending_ratio, combo.name, bending_ratio <= 1.0)
+            governing_cl = beam_stab.cl
+        if interaction_best is None or interaction > interaction_best.ratio:
+            interaction_best = ColumnCheckResult(
+                "Combined axial + bending (NDS 3.9-3)", 0.0, 0.0, interaction, combo.name, interaction <= 1.0,
+            )
+
+    if axial_best is None:
+        axial_best = ColumnCheckResult("Axial compression", 0.0, 0.0, 0.0, "None", True)
+    if bending_best is None:
+        bending_best = ColumnCheckResult("Bending", 0.0, 0.0, 0.0, "None", True)
+    if interaction_best is None:
+        interaction_best = ColumnCheckResult("Combined axial + bending (NDS 3.9-3)", 0.0, 0.0, 0.0, "None", True)
+    if slenderness > 50.0:
+        interaction_best = ColumnCheckResult(
+            f"Combined axial + bending -- le/d = {slenderness:.0f} EXCEEDS NDS SLENDERNESS LIMIT OF 50",
+            0.0, 0.0, max(interaction_best.ratio, 999.0), interaction_best.governing_combo, False,
+        )
+
+    summary = BeamColumnSummary(
+        section=SectionSummary(
+            nominal=section.nominal, b=section.b, d=section.d,
+            A=section.A, I=section.I, S=section.S, plies=section.plies,
+        ),
+        material_name=material.name,
+        material_category=material.category,
+        fc_base=material.Fc,
+        fb_base=fb_base,
+        e=material.E,
+        emin=material.Emin,
+        cf_c=cf_c,
+        cf_b=cf_b,
+        c_coefficient=c_coefficient,
+        ke=ke,
+        unbraced_length_d=unbraced_length_d,
+        unbraced_length_b=unbraced_length_b,
+        slenderness=slenderness,
+        cp=governing_cp,
+        cl=governing_cl,
+        fce1=fce1,
+        lateral_load_plf=lateral_load_plf,
+        bending_moment=bending_moment,
+        height_ft=height_ft,
+        combos=combos,
+    )
+    return BeamColumnResult(summary=summary, axial=axial_best, bending=bending_best, interaction=interaction_best)

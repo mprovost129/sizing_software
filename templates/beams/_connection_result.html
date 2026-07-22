@@ -1,0 +1,85 @@
+{% if not result.yield_result %}
+<div class="fc-card" style="margin-top:1rem;">
+    <div class="verdict-banner verdict-banner--{% if not result.applicable %}fail{% elif result.demand and not result.passed %}fail{% else %}pass{% endif %}" style="padding:0.9rem 1.25rem;">
+        <p class="verdict-title">
+            {% if not result.applicable %}
+                <i class="bi bi-x-circle-fill"></i> Bolts are not designed for withdrawal
+            {% elif result.demand %}
+                {% if result.passed %}<i class="bi bi-check-circle-fill"></i> PASS{% else %}<i class="bi bi-x-circle-fill"></i> FAIL{% endif %}
+                &mdash; demand/capacity {{ result.ratio|floatformat:3 }}
+            {% else %}
+                <i class="bi bi-info-circle-fill"></i> Reference withdrawal capacity
+            {% endif %}
+        </p>
+        <p class="verdict-sub" style="font-size:0.8rem;">
+            {% if result.applicable %}W = {{ result.w_per_inch|floatformat:1 }} lb/in (NDS 12.2) &middot; W' = W &times; {{ result.penetration|floatformat:2 }} in &times; C<sub>D</sub>({{ result.cd }}){% if result.cm < 1 %} &times; C<sub>M</sub>({{ result.cm|floatformat:2 }}){% endif %}{% if result.ctn < 1 %} &times; C<sub>tn</sub>({{ result.ctn|floatformat:2 }}){% endif %}{% if result.ct < 1 %} &times; C<sub>t</sub>({{ result.ct|floatformat:2 }}){% endif %} = {{ result.w_adjusted|floatformat:0 }} lb/fastener &middot; {{ result.n_fasteners }} &times; = {{ result.capacity|floatformat:0 }} lb{% else %}Use a nail, wood screw, or lag screw for withdrawal loading.{% endif %}
+        </p>
+    </div>
+    <div class="fc-card-body">
+        {% if result.applicable %}
+        <div class="stat-row">
+            <div class="stat-pill"><div class="stat-label">W (lb/in)</div><div class="stat-value">{{ result.w_per_inch|floatformat:1 }}</div></div>
+            <div class="stat-pill"><div class="stat-label">Penetration (in)</div><div class="stat-value">{{ result.penetration|floatformat:2 }}</div></div>
+            <div class="stat-pill"><div class="stat-label">W (lb/fastener)</div><div class="stat-value">{{ result.w_single|floatformat:0 }}</div></div>
+            <div class="stat-pill"><div class="stat-label">W' (lb/fastener)</div><div class="stat-value">{{ result.w_adjusted|floatformat:0 }}</div></div>
+            {% if result.cm < 1 %}<div class="stat-pill"><div class="stat-label">C<sub>M</sub></div><div class="stat-value">{{ result.cm|floatformat:2 }}</div></div>{% endif %}
+            {% if result.ctn < 1 %}<div class="stat-pill"><div class="stat-label">C<sub>tn</sub></div><div class="stat-value">{{ result.ctn|floatformat:2 }}</div></div>{% endif %}
+            {% if result.ct < 1 %}<div class="stat-pill"><div class="stat-label">C<sub>t</sub></div><div class="stat-value">{{ result.ct|floatformat:2 }}</div></div>{% endif %}
+            <div class="stat-pill"><div class="stat-label">Capacity (lb)</div><div class="stat-value">{{ result.capacity|floatformat:0 }}</div></div>
+        </div>
+        {% endif %}
+        <p style="font-size:0.74rem;color:var(--fc-text-muted);margin-top:0.75rem;">
+            Withdrawal design value (NDS 12.2), W' = W &times; penetration &times; C<sub>D</sub> &times; C<sub>M</sub> &times; C<sub>tn</sub> &times; C<sub>t</sub> per fastener. Wet service C<sub>M</sub> (NDS Table 11.3.3) is 0.25 for nails/spikes and 0.7 for lag/wood screws; the toe-nail factor C<sub>tn</sub> (NDS 12.5.4) is 0.67 for toe-nailed nails/spikes; C<sub>t</sub> is the temperature factor (NDS Table 11.3.4). Fastener must penetrate the holding member the entered depth; bolts are not designed for withdrawal.
+        </p>
+    </div>
+</div>
+{% else %}
+{% with y=result.yield_result %}
+<div class="fc-card" style="margin-top:1rem;">
+    <div class="verdict-banner verdict-banner--{% if result.demand and not result.passed %}fail{% else %}pass{% endif %}" style="padding:0.9rem 1.25rem;">
+        <p class="verdict-title">
+            {% if result.demand %}
+                {% if result.passed %}<i class="bi bi-check-circle-fill"></i> PASS{% else %}<i class="bi bi-x-circle-fill"></i> FAIL{% endif %}
+                &mdash; demand/capacity {{ result.ratio|floatformat:3 }}
+            {% else %}
+                <i class="bi bi-info-circle-fill"></i> Reference capacity
+            {% endif %}
+        </p>
+        <p class="verdict-sub" style="font-size:0.8rem;">
+            Z = {{ result.z|floatformat:0 }} lb (mode {{ result.mode }}) &middot;
+            Z' = Z &times; C<sub>D</sub>({{ result.cd }}){% if result.cm < 1 %} &times; C<sub>M</sub>({{ result.cm|floatformat:2 }}){% endif %}{% if result.ctn < 1 %} &times; C<sub>tn</sub>({{ result.ctn|floatformat:2 }}){% endif %}{% if result.ct < 1 %} &times; C<sub>t</sub>({{ result.ct|floatformat:2 }}){% endif %}{% if result.cg < 1 %} &times; C<sub>g</sub>({{ result.cg|floatformat:3 }}){% endif %}{% if result.c_delta < 1 %} &times; C<sub>&Delta;</sub>({{ result.c_delta|floatformat:3 }}){% endif %} = {{ result.z_adjusted|floatformat:0 }} lb/fastener &middot;
+            {{ result.n_fasteners }} fastener{{ result.n_fasteners|pluralize }} = {{ result.capacity|floatformat:0 }} lb
+        </p>
+    </div>
+    <div class="fc-card-body">
+        <div class="stat-row">
+            <div class="stat-pill"><div class="stat-label">Z (lb)</div><div class="stat-value">{{ result.z|floatformat:0 }}</div></div>
+            <div class="stat-pill"><div class="stat-label">Mode</div><div class="stat-value">{{ result.mode }}</div></div>
+            <div class="stat-pill"><div class="stat-label">F<sub>em</sub> (psi)</div><div class="stat-value">{{ y.fem|floatformat:0 }}</div></div>
+            <div class="stat-pill"><div class="stat-label">F<sub>es</sub> (psi)</div><div class="stat-value">{{ y.fes|floatformat:0 }}</div></div>
+            <div class="stat-pill"><div class="stat-label">R<sub>e</sub></div><div class="stat-value">{{ y.re|floatformat:3 }}</div></div>
+            <div class="stat-pill"><div class="stat-label">R<sub>t</sub></div><div class="stat-value">{{ y.rt|floatformat:3 }}</div></div>
+            {% if result.cm < 1 %}<div class="stat-pill"><div class="stat-label">C<sub>M</sub></div><div class="stat-value">{{ result.cm|floatformat:2 }}</div></div>{% endif %}
+            {% if result.ctn < 1 %}<div class="stat-pill"><div class="stat-label">C<sub>tn</sub></div><div class="stat-value">{{ result.ctn|floatformat:2 }}</div></div>{% endif %}
+            {% if result.ct < 1 %}<div class="stat-pill"><div class="stat-label">C<sub>t</sub></div><div class="stat-value">{{ result.ct|floatformat:2 }}</div></div>{% endif %}
+            <div class="stat-pill"><div class="stat-label">C<sub>g</sub></div><div class="stat-value">{{ result.cg|floatformat:3 }}</div></div>
+            <div class="stat-pill"><div class="stat-label">C<sub>&Delta;</sub></div><div class="stat-value">{{ result.c_delta|floatformat:3 }}</div></div>
+            <div class="stat-pill"><div class="stat-label">Z' (lb)</div><div class="stat-value">{{ result.z_adjusted|floatformat:0 }}</div></div>
+            <div class="stat-pill"><div class="stat-label">Capacity (lb)</div><div class="stat-value">{{ result.capacity|floatformat:0 }}</div></div>
+        </div>
+        <table class="fc-table" style="margin-top:0.75rem;font-size:0.82rem;max-width:22rem;">
+            <thead><tr><th>Yield mode</th><th>Z (lb)</th></tr></thead>
+            <tbody>
+            {% for mode, val in y.mode_values.items %}
+            <tr class="{% if mode == result.mode %}scan-row--economy{% endif %}"><td>{{ mode }}{% if mode == result.mode %} &larr; governs{% endif %}</td><td>{{ val|floatformat:0 }}</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        <p style="font-size:0.74rem;color:var(--fc-text-muted);margin-top:0.75rem;">
+            Z' applies load duration C<sub>D</sub>, the wet service factor C<sub>M</sub> (NDS Table 11.3.3, 0.7 laterally when wet), the toe-nail factor C<sub>tn</sub> (NDS 12.5.4, 0.83 for toe-nailed nails/spikes), the temperature factor C<sub>t</sub> (NDS Table 11.3.4), and the group-action C<sub>g</sub> and geometry C<sub>&Delta;</sub> factors when their inputs are given. Edge-distance requirements are not yet applied.
+            {% if result.double_shear %}Double shear (main member between two side members).{% else %}Single-shear, two-member connection.{% endif %}
+        </p>
+    </div>
+</div>
+{% endwith %}
+{% endif %}

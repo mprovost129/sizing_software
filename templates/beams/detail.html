@@ -204,6 +204,26 @@
                         </div>
                     </div>
                     <div class="saved-input-item">
+                        <div class="saved-input-label">End Notch</div>
+                        <div class="saved-input-value">
+                            {% if design.end_notch_depth_in %}
+                                {{ design.end_notch_depth_in|floatformat:2 }} in deep &middot; d<sub>n</sub> = {{ result.summary.notch_dn|floatformat:2 }} in (shear &times;(d<sub>n</sub>/d)&sup2;)
+                            {% else %}
+                                None
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="saved-input-item">
+                        <div class="saved-input-label">Round Hole</div>
+                        <div class="saved-input-value">
+                            {% if design.hole_diameter_in %}
+                                {{ design.hole_diameter_in|floatformat:2 }} in dia{% if design.hole_location_ft is not None %} at {{ design.hole_location_ft|floatformat:2 }} ft{% else %} (at max shear){% endif %} &middot; d<sub>n</sub> = {{ result.summary.hole_net_depth|floatformat:2 }} in
+                            {% else %}
+                                None
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="saved-input-item">
                         <div class="saved-input-label">Compression Edge Bracing</div>
                         <div class="saved-input-value">
                             {% if design.unbraced_length_ft %}

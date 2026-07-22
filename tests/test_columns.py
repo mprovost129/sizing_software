@@ -28,6 +28,9 @@ class ColumnDesignerTests(TestCase):
             "unbraced_length_d_ft": "",
             "unbraced_length_b_ft": "",
             "end_condition": "1.0",
+            "lateral_load_plf": "",
+            "lateral_load_type": "wind",
+            "bending_unbraced_length_ft": "",
         }
         data.update(overrides)
         return self.client.post(reverse("beams:column"), data)
@@ -102,3 +105,40 @@ class ColumnDesignerTests(TestCase):
         detail = self.client.get(reverse("beams:project_detail", args=[project.pk]))
         self.assertEqual(detail.status_code, 200)
         self.assertContains(detail, "Deck Post")
+
+    def test_beam_column_run_and_save_detail_pdf(self):
+        # A lateral load turns the column into a beam-column (interaction check).
+        run = self._post(action="run", material="dfl_no1", nominal_size="4x6", plies=1,
+                         dead_load_lb=3000, live_load_lb=1000, height_ft=10,
+                         lateral_load_plf=120, lateral_load_type="wind")
+        result = run.context["result"]
+        self.assertTrue(hasattr(result, "interaction"))
+        self.assertEqual(result.interaction.governing_combo, "D+W")
+        self.assertAlmostEqual(result.interaction.ratio, 0.617, places=2)
+
+        save = self._post(action="save", name="Wind Stud", material="dfl_no1", nominal_size="4x6", plies=1,
+                          dead_load_lb=3000, live_load_lb=1000, height_ft=10,
+                          lateral_load_plf=120, lateral_load_type="wind")
+        column = ColumnDesign.objects.get(name="Wind Stud")
+        self.assertRedirects(save, reverse("beams:column_detail", args=[column.pk]))
+        self.assertTrue(column.is_beam_column)
+        # Saved inputs recompute to a beam-column result.
+        recomputed = column.compute_result()
+        self.assertTrue(hasattr(recomputed, "interaction"))
+        self.assertAlmostEqual(recomputed.interaction.ratio, 0.617, places=2)
+
+        detail = self.client.get(reverse("beams:column_detail", args=[column.pk]))
+        self.assertContains(detail, "beam-column")
+        pdf = self.client.get(reverse("beams:column_export_pdf", args=[column.pk]))
+        self.assertEqual(pdf.status_code, 200)
+        self.assertTrue(pdf.content.startswith(b"%PDF"))
+
+    def test_beam_column_in_project_package(self):
+        project = BeamProject.objects.create(user=self.user, name="Job Wind")
+        self._post(action="save", name="Braced Stud", project=project.pk, material="dfl_no1",
+                   nominal_size="4x6", dead_load_lb=3000, height_ft=10, lateral_load_plf=100)
+        pdf = self.client.get(reverse("beams:project_export_pdf", args=[project.pk]))
+        self.assertEqual(pdf.status_code, 200)
+        self.assertTrue(pdf.content.startswith(b"%PDF"))
+        csv_resp = self.client.get(reverse("beams:project_export_csv", args=[project.pk]))
+        self.assertIn("Braced Stud", csv_resp.content.decode())

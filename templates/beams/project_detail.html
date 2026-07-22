@@ -139,7 +139,33 @@
                     <div class="design-card-props">
                         <span class="design-prop"><strong>{{ column.section_label }}</strong> {{ column.get_material_display }}</span>
                         <span class="design-prop"><strong>{{ column.height_ft|floatformat:1 }} ft</strong> column</span>
-                        <span class="design-prop">Gov: <strong>{{ cresult.compression.ratio|floatformat:3 }}</strong></span>
+                        <span class="design-prop">{% if column.is_beam_column %}beam-column{% else %}column{% endif %} Gov: <strong>{{ cresult.governing.ratio|floatformat:3 }}</strong></span>
+                    </div>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if connection_rows %}
+    <div class="fc-card" style="margin-top:1rem;">
+        <div class="fc-card-header">
+            <span class="fc-card-title"><i class="bi bi-nut"></i> Connections</span>
+            <span style="font-size:.72rem;color:var(--fc-text-muted);">{{ connection_rows|length }} connection{{ connection_rows|length|pluralize }}</span>
+        </div>
+        <div class="fc-card-body">
+            <div class="designs-grid">
+                {% for conn, cresult in connection_rows %}
+                <a href="{% url 'beams:connection_detail' conn.pk %}" class="design-card" style="border-left:3px solid {% if cresult.demand and not cresult.passed %}var(--fc-fail-border){% else %}var(--fc-pass-border){% endif %};">
+                    <div class="design-card-top">
+                        <div><p class="design-card-name">{{ conn.name|default:"Unnamed connection" }}</p><p class="design-card-meta">{{ conn.created_at|date:"M j, Y" }}</p></div>
+                        <span class="fc-badge fc-badge--{% if cresult.demand and not cresult.passed %}fail{% else %}pass{% endif %}">{% if cresult.demand %}{% if cresult.passed %}PASS{% else %}FAIL{% endif %}{% else %}REF{% endif %}</span>
+                    </div>
+                    <div class="design-card-props">
+                        <span class="design-prop"><strong>{{ conn.get_fastener_type_display }}</strong> {{ conn.diameter_in|floatformat:3 }}"</span>
+                        <span class="design-prop">{% if conn.loading == 'withdrawal' %}withdrawal{% else %}{{ conn.get_shear_planes_display }}{% endif %}</span>
+                        <span class="design-prop">{% if cresult.demand %}Ratio: <strong>{{ cresult.ratio|floatformat:3 }}</strong>{% else %}<strong>{{ cresult.capacity|floatformat:0 }} lb</strong>{% endif %}</span>
                     </div>
                 </a>
                 {% endfor %}

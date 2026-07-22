@@ -5,7 +5,19 @@ philosophy: the calculation engine is the foundation every interface
 (web, API, CLI, AI assistant) builds on, not the other way around.
 """
 from .checks import BeamDesignResult, CheckResult, design_beam
-from .columns import ColumnResult, design_column
+from .columns import BeamColumnResult, ColumnResult, design_beam_column, design_column
+from .connections import (
+    ConnectionResult,
+    DowelYield,
+    WithdrawalResult,
+    design_connection,
+    design_withdrawal,
+    double_shear_z,
+    single_shear_z,
+    temperature_factor,
+    toe_nail_factor,
+    wet_service_factor,
+)
 from .factors import (
     DEFLECTION_LIMITS,
     MEMBER_TYPE_LABELS,
@@ -55,7 +67,19 @@ __all__ = [
     "PointLoad",
     "design_beam",
     "design_column",
+    "design_beam_column",
+    "design_connection",
+    "design_withdrawal",
+    "single_shear_z",
+    "double_shear_z",
+    "wet_service_factor",
+    "toe_nail_factor",
+    "temperature_factor",
+    "WithdrawalResult",
     "ColumnResult",
+    "BeamColumnResult",
+    "ConnectionResult",
+    "DowelYield",
     "BeamDesignResult",
     "CheckResult",
     "MEMBER_TYPE_LABELS",

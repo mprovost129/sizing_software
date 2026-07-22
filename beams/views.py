@@ -16,6 +16,7 @@ from engine import (
     clear_span,
     default_deflection_settings,
     design_beam,
+    design_beam_column,
     design_column,
     get_material,
 )
@@ -33,6 +34,7 @@ from .forms import (
     BeamDesignForm,
     BeamProjectForm,
     ColumnDesignForm,
+    ConnectionDesignForm,
     DistributedLoadFormSet,
     PointLoadFormSet,
 )
@@ -48,8 +50,14 @@ from .models import (
     BeamProjectIssue,
     BeamProjectIssueMember,
     ColumnDesign,
+    ConnectionDesign,
 )
-from .pdf import render_beam_design_pdf, render_column_design_pdf, render_project_pdf
+from .pdf import (
+    render_beam_design_pdf,
+    render_column_design_pdf,
+    render_connection_design_pdf,
+    render_project_pdf,
+)
 
 MEMBER_TYPE_LABEL_MAP = dict(MEMBER_TYPE_CHOICES)
 
@@ -59,11 +67,12 @@ COPYABLE_DESIGN_FIELDS = (
     "left_overhang_ft", "right_overhang_ft",
     "uniform_load_basis", "spacing_in",
     "dead_load_plf", "live_load_plf", "snow_load_plf", "roof_live_load_plf", "wind_load_plf",
-    "material", "service_condition", "nominal_size", "plies", "repetitive", "unbraced_length_ft",
+    "material", "service_condition", "nominal_size", "plies", "repetitive", "unbraced_length_ft", "end_notch_depth_in",
+    "hole_diameter_in", "hole_location_ft",
     "bearing_length_left_in", "bearing_length_mid_in", "bearing_length_mid_2_in", "bearing_length_right_in",
     "support_type_left", "support_type_mid", "support_type_mid_2", "support_type_right",
     "deflection_limit_live", "deflection_limit_total",
-    "cantilever_deflection_limit_live", "cantilever_deflection_limit_total",
+    "cantilever_deflection_limit_live", "cantilever_deflection_limit_total", "creep_factor",
 )
 
 TAB_FIELDS = {
@@ -79,9 +88,10 @@ TAB_FIELDS = {
     ),
     "settings": (
         "project", "new_project_name", "name", "member_type", "performance_profile", "subfloor_profile",
-        "material", "service_condition", "nominal_size", "plies", "repetitive", "unbraced_length_ft",
+        "material", "service_condition", "nominal_size", "plies", "repetitive", "unbraced_length_ft", "end_notch_depth_in",
+    "hole_diameter_in", "hole_location_ft",
         "deflection_limit_live", "deflection_limit_total",
-        "cantilever_deflection_limit_live", "cantilever_deflection_limit_total",
+        "cantilever_deflection_limit_live", "cantilever_deflection_limit_total", "creep_factor",
     ),
 }
 
@@ -188,6 +198,10 @@ def _run_design(data, loads, nominal_size):
         bearing_lengths=bearing_lengths,
         unbraced_length=(data.get("unbraced_length_ft") or 0) * 12 or None,
         wet_service=(data.get("service_condition") or "dry") == "wet",
+        end_notch_depth=data.get("end_notch_depth_in") or 0,
+        hole_diameter=data.get("hole_diameter_in") or 0,
+        hole_location=data.get("hole_location_ft"),
+        creep_factor=data.get("creep_factor") or 1.0,
     )
 
 
@@ -463,6 +477,10 @@ class BeamDesignView(LoginRequiredMixin, View):
                 plies=data.get("plies") or 1,
                 repetitive=data["repetitive"],
                 unbraced_length_ft=data.get("unbraced_length_ft"),
+                end_notch_depth_in=data.get("end_notch_depth_in") or 0,
+                hole_diameter_in=data.get("hole_diameter_in") or 0,
+                hole_location_ft=data.get("hole_location_ft"),
+                creep_factor=data.get("creep_factor") or 1.0,
                 bearing_length_left_in=data["bearing_length_left_in"],
                 bearing_length_mid_in=data.get("bearing_length_mid_in"),
                 bearing_length_mid_2_in=data.get("bearing_length_mid_2_in"),
@@ -554,6 +572,8 @@ class ColumnDesignView(LoginRequiredMixin, View):
         material = get_material(data["material"])
         plies = 1 if (material.is_glulam or material.is_timber) else (data.get("plies") or 1)
 
+        lateral = data.get("lateral_load_plf") or 0
+
         if request.POST.get("action") == "save":
             column = ColumnDesign.objects.create(
                 user=request.user,
@@ -571,26 +591,35 @@ class ColumnDesignView(LoginRequiredMixin, View):
                 unbraced_length_d_ft=data.get("unbraced_length_d_ft"),
                 unbraced_length_b_ft=data.get("unbraced_length_b_ft"),
                 end_condition=data["end_condition"],
+                lateral_load_plf=lateral,
+                lateral_load_type=data.get("lateral_load_type") or "wind",
+                bending_unbraced_length_ft=data.get("bending_unbraced_length_ft"),
             )
             return redirect("beams:column_detail", pk=column.pk)
 
         section = Section.from_nominal(data["nominal_size"], plies=plies)
         ld_in = (data.get("unbraced_length_d_ft") or data["height_ft"]) * 12
         lb_in = (data.get("unbraced_length_b_ft") or data["height_ft"]) * 12
-        context["result"] = design_column(
-            {
-                "dead": data.get("dead_load_lb") or 0,
-                "live": data.get("live_load_lb") or 0,
-                "snow": data.get("snow_load_lb") or 0,
-                "roof_live": data.get("roof_live_load_lb") or 0,
-                "wind": data.get("wind_load_lb") or 0,
-            },
-            section=section,
-            material=material,
-            unbraced_length_d=ld_in,
-            unbraced_length_b=lb_in,
-            ke=float(data["end_condition"]),
-        )
+        axial = {
+            "dead": data.get("dead_load_lb") or 0,
+            "live": data.get("live_load_lb") or 0,
+            "snow": data.get("snow_load_lb") or 0,
+            "roof_live": data.get("roof_live_load_lb") or 0,
+            "wind": data.get("wind_load_lb") or 0,
+        }
+        if lateral:
+            context["result"] = design_beam_column(
+                axial, section=section, material=material,
+                unbraced_length_d=ld_in, unbraced_length_b=lb_in, ke=float(data["end_condition"]),
+                height_ft=data["height_ft"], lateral_load_plf=lateral,
+                lateral_load_type=data.get("lateral_load_type") or "wind",
+                bending_unbraced_length=(data.get("bending_unbraced_length_ft") or 0) * 12 or None,
+            )
+        else:
+            context["result"] = design_column(
+                axial, section=section, material=material,
+                unbraced_length_d=ld_in, unbraced_length_b=lb_in, ke=float(data["end_condition"]),
+            )
         context["height_ft"] = data["height_ft"]
         return render(request, self.template_name, context)
 
@@ -621,6 +650,80 @@ class ColumnDesignExportPDFView(LoginRequiredMixin, View):
         pdf_bytes = render_column_design_pdf(column, column.compute_result())
         response = HttpResponse(pdf_bytes, content_type="application/pdf")
         filename = (column.name or f"column-{column.pk}").replace(" ", "_")
+        response["Content-Disposition"] = f'attachment; filename="{filename}.pdf"'
+        return response
+
+
+_CONNECTION_FIELDS = (
+    "loading", "shear_planes", "fastener_type", "diameter_in", "fyb_psi",
+    "main_material", "main_thickness_in", "side_material", "side_thickness_in",
+    "load_direction", "toe_nail", "service_condition", "temperature",
+    "load_duration", "n_fasteners", "load_lb",
+    "fastener_spacing_in", "main_width_in", "side_width_in", "end_distance_in",
+)
+
+
+def _connection_from_form(data):
+    """Build an (unsaved) ConnectionDesign from cleaned form data; its
+    compute_result() is the single source of the connection calculation."""
+    return ConnectionDesign(**{f: data.get(f) for f in _CONNECTION_FIELDS})
+
+
+class ConnectionDesignView(LoginRequiredMixin, View):
+    """Dowel connection designer (NDS Chapter 12): compute, or save it."""
+    template_name = "beams/connection.html"
+
+    def _extra(self, request):
+        return {
+            "saved_connections": ConnectionDesign.objects.filter(user=request.user).select_related("project")[:20],
+            "projects": BeamProject.objects.filter(user=request.user),
+        }
+
+    def get(self, request):
+        return render(request, self.template_name, {"form": ConnectionDesignForm(), **self._extra(request)})
+
+    def post(self, request):
+        form = ConnectionDesignForm(request.POST)
+        context = {"form": form, **self._extra(request)}
+        if not form.is_valid():
+            return render(request, self.template_name, context)
+        connection = _connection_from_form(form.cleaned_data)
+        if request.POST.get("action") == "save":
+            connection.user = request.user
+            connection.name = request.POST.get("name") or ""
+            project_id = request.POST.get("project") or ""
+            if project_id.isdigit():
+                connection.project = get_object_or_404(BeamProject, pk=int(project_id), user=request.user)
+            connection.save()
+            return redirect("beams:connection_detail", pk=connection.pk)
+        context["result"] = connection.compute_result()
+        return render(request, self.template_name, context)
+
+
+class ConnectionDesignDetailView(LoginRequiredMixin, View):
+    template_name = "beams/connection_detail.html"
+
+    def get(self, request, pk):
+        connection = get_object_or_404(ConnectionDesign, pk=pk, user=request.user)
+        return render(request, self.template_name, {
+            "connection": connection, "result": connection.compute_result(),
+        })
+
+
+class ConnectionDesignDeleteView(LoginRequiredMixin, View):
+    def post(self, request, pk):
+        connection = get_object_or_404(ConnectionDesign, pk=pk, user=request.user)
+        connection.delete()
+        messages.success(request, "Connection design deleted.")
+        return redirect("beams:connection")
+
+
+class ConnectionDesignExportPDFView(LoginRequiredMixin, View):
+    def get(self, request, pk):
+        connection = get_object_or_404(ConnectionDesign, pk=pk, user=request.user)
+        pdf_bytes = render_connection_design_pdf(connection, connection.compute_result())
+        response = HttpResponse(pdf_bytes, content_type="application/pdf")
+        filename = (connection.name or f"connection-{connection.pk}").replace(" ", "_")
         response["Content-Disposition"] = f'attachment; filename="{filename}.pdf"'
         return response
 
@@ -721,10 +824,15 @@ class BeamProjectDetailView(LoginRequiredMixin, View):
             (column, column.compute_result())
             for column in project.column_designs.all()
         ]
+        connection_rows = [
+            (conn, conn.compute_result())
+            for conn in project.connection_designs.all()
+        ]
         return render(request, self.template_name, {
             "project": project,
             "rows": rows,
             "column_rows": column_rows,
+            "connection_rows": connection_rows,
             "passing_count": sum(1 for _, result in rows if result.passed),
             "failing_count": sum(1 for _, result in rows if not result.passed),
             "issues": project.issues.select_related("created_by").all(),
@@ -800,10 +908,46 @@ class BeamProjectExportCSVView(LoginRequiredMixin, View):
                     f"{column.height_ft:g}",
                     f"{result.summary.slenderness:.1f}",
                     f"{result.summary.cp:.3f}",
-                    result.compression.name,
-                    f"{result.compression.ratio:.3f}",
+                    result.governing.name,
+                    f"{result.governing.ratio:.3f}",
                     "PASS" if result.passed else "FAIL",
                     column.created_at.isoformat(),
+                ])
+        connections = project.connection_designs.all()
+        if connections:
+            writer.writerow([])
+            writer.writerow(["Connections"])
+            writer.writerow([
+                "Name", "Fastener", "Diameter (in)", "Type", "Z or W (lb)", "Z' or W' (lb)",
+                "Capacity (lb)", "Governing", "Ratio/Status", "Created",
+            ])
+            for conn in connections:
+                result = conn.compute_result()
+                if getattr(result, "yield_result", None) is None:  # withdrawal
+                    ratio = (f"{result.ratio:.3f}" if result.demand else "reference")
+                    row = [
+                        "withdrawal",
+                        f"{result.w_per_inch:.1f}/in" if result.applicable else "n/a",
+                        f"{result.w_adjusted:.0f}" if result.applicable else "n/a",
+                        f"{result.capacity:.0f}" if result.applicable else "n/a",
+                        "withdrawal" if result.applicable else "not applicable",
+                        ratio if result.applicable else "n/a",
+                    ]
+                else:
+                    row = [
+                        "double shear" if result.double_shear else "single shear",
+                        f"{result.z:.0f}",
+                        f"{result.z_adjusted:.0f}",
+                        f"{result.capacity:.0f}",
+                        result.mode,
+                        (f"{result.ratio:.3f}" if result.demand else "reference"),
+                    ]
+                writer.writerow([
+                    conn.name or f"Connection #{conn.pk}",
+                    conn.get_fastener_type_display(),
+                    f"{conn.diameter_in:g}",
+                    *row,
+                    conn.created_at.isoformat(),
                 ])
         return response
 
@@ -819,7 +963,13 @@ class BeamProjectExportPDFView(LoginRequiredMixin, View):
             (column, column.compute_result())
             for column in project.column_designs.all()
         ]
-        pdf_bytes = render_project_pdf(project, design_results, column_results=column_results)
+        connection_results = [
+            (conn, conn.compute_result())
+            for conn in project.connection_designs.all()
+        ]
+        pdf_bytes = render_project_pdf(
+            project, design_results, column_results=column_results, connection_results=connection_results,
+        )
 
         response = HttpResponse(pdf_bytes, content_type="application/pdf")
         filename = project.name.replace(" ", "_") or f"project-{project.pk}"
