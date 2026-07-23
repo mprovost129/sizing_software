@@ -80,15 +80,31 @@ def _analysis_nodes(total_length, loads, support_positions):
     return sorted(nodes)
 
 
-def _solve_linear_system(A, b):
+_SINGULAR_MSG = "Beam stiffness matrix is singular for the given support layout."
+
+
+def _half_bandwidth(A):
+    """Largest |i-j| over the nonzero entries of A -- its half-bandwidth."""
     n = len(A)
-    if n == 0:
-        return []
+    bw = 0
+    for i in range(n):
+        row = A[i]
+        # Farthest nonzero left of the diagonal sets the bandwidth (A is the
+        # symmetric beam stiffness partition, so scanning below suffices).
+        for j in range(min(i - bw - 1, n - 1), -1, -1):
+            if row[j] != 0.0:
+                bw = i - j
+                break
+    return bw
+
+
+def _solve_dense_system(A, b):
+    n = len(A)
     aug = [row[:] + [rhs] for row, rhs in zip(A, b)]
     for col in range(n):
         pivot = max(range(col, n), key=lambda r: abs(aug[r][col]))
         if abs(aug[pivot][col]) < 1e-12:
-            raise ValueError("Beam stiffness matrix is singular for the given support layout.")
+            raise ValueError(_SINGULAR_MSG)
         if pivot != col:
             aug[col], aug[pivot] = aug[pivot], aug[col]
         pivot_val = aug[col][col]
@@ -103,6 +119,52 @@ def _solve_linear_system(A, b):
             for j in range(col, n + 1):
                 aug[row][j] -= factor * aug[col][j]
     return [aug[i][n] for i in range(n)]
+
+
+def _solve_banded_system(A, b, bw):
+    """Gaussian elimination limited to a band of half-width ``bw``, giving
+    O(n * bw^2) instead of the dense O(n^3). The beam free-free stiffness
+    matrix is symmetric positive definite, so no pivoting is needed (its
+    pivots are the positive Cholesky pivots) and the factor fill stays inside
+    the band. A near-zero pivot means an unstable support layout."""
+    n = len(A)
+    a = [row[:] for row in A]
+    rhs = b[:]
+    for k in range(n):
+        piv = a[k][k]
+        if abs(piv) < 1e-12:
+            raise ValueError(_SINGULAR_MSG)
+        hi = min(k + bw + 1, n)
+        for i in range(k + 1, hi):
+            factor = a[i][k] / piv
+            if factor == 0.0:
+                continue
+            row_i, row_k = a[i], a[k]
+            for j in range(k, hi):
+                row_i[j] -= factor * row_k[j]
+            rhs[i] -= factor * rhs[k]
+    x = [0.0] * n
+    for i in range(n - 1, -1, -1):
+        s = rhs[i]
+        hi = min(i + bw + 1, n)
+        row_i = a[i]
+        for j in range(i + 1, hi):
+            s -= row_i[j] * x[j]
+        x[i] = s / a[i][i]
+    return x
+
+
+def _solve_linear_system(A, b):
+    n = len(A)
+    if n == 0:
+        return []
+    # The beam stiffness partition is narrowly banded (2 DOF/node, only
+    # adjacent nodes couple). A banded solve is O(n) there; fall back to dense
+    # partial-pivoting for anything not clearly banded.
+    bw = _half_bandwidth(A)
+    if bw * 3 < n:
+        return _solve_banded_system(A, b, bw)
+    return _solve_dense_system(A, b)
 
 
 def _solve_support_reactions(total_length, loads, support_positions, E=1.0, I=1.0):

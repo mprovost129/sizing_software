@@ -874,6 +874,38 @@ def test_connection_steel_side_plate_nds_12_3_3():
     assert double.z == pytest.approx(2 * steel.z, rel=1e-6)
 
 
+def test_banded_solver_matches_dense():
+    # The banded (O(n)) solver must agree with the dense partial-pivoting
+    # solver on the symmetric positive-definite systems the beam FEM produces,
+    # so switching to it changes nothing but speed.
+    import random
+
+    from engine.beam import (
+        _half_bandwidth,
+        _solve_banded_system,
+        _solve_dense_system,
+        _solve_linear_system,
+    )
+
+    random.seed(7)
+    for n, bw in [(8, 3), (50, 3), (200, 3), (60, 5)]:
+        a = [[0.0] * n for _ in range(n)]
+        for i in range(n):
+            for j in range(i, min(i + bw + 1, n)):
+                v = random.uniform(-1.0, 1.0)
+                a[i][j] = a[j][i] = v
+        for i in range(n):  # diagonally dominant -> SPD, no pivoting needed
+            a[i][i] = sum(abs(a[i][j]) for j in range(n)) + 1.0
+        b = [random.uniform(-5.0, 5.0) for _ in range(n)]
+        assert _half_bandwidth(a) == bw
+        dense = _solve_dense_system([r[:] for r in a], b[:])
+        banded = _solve_banded_system([r[:] for r in a], b[:], bw)
+        dispatched = _solve_linear_system([r[:] for r in a], b[:])
+        for xd, xb, xl in zip(dense, banded, dispatched):
+            assert xb == pytest.approx(xd, abs=1e-9)
+            assert xl == pytest.approx(xd, abs=1e-9)
+
+
 def test_pattern_live_load_envelope_two_span():
     # Two equal spans L, uniform live w on the member. Classic results:
     #   max positive span moment under skip loading = 49/512 w L^2
