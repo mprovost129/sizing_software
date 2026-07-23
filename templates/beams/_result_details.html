@@ -193,9 +193,10 @@
         }
     });
 
-    function drawDiagram(svgId, points, supportPositions, supportLabels, stroke, fill, invert) {
+    function drawDiagram(svgId, points, supportPositions, supportLabels, stroke, fill, invert, lowerPoints) {
         const svg = document.getElementById(svgId);
         if (!svg || !points.length) return;
+        const hasLower = lowerPoints && lowerPoints.length;
         const W = 520, H = 180;
         const left = 46, right = 16, top = 12, bottom = 30;
         const innerW = W - left - right;
@@ -204,8 +205,9 @@
         // it sagging DOWN (the real deformed shape) rather than arching up,
         // matching BC Calc; axis labels below stay positive-down.
         const yval = p => (invert ? -p.y : p.y);
-        const xs = points.map(p => p.x);
-        const ys = points.map(yval);
+        const allPts = hasLower ? points.concat(lowerPoints) : points;
+        const xs = allPts.map(p => p.x);
+        const ys = allPts.map(yval);
         const minX = Math.min(...xs);
         const maxX = Math.max(...xs);
         const minY = Math.min(...ys, 0);
@@ -235,10 +237,15 @@
             svg.appendChild(label);
         });
 
-        const path = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${scaleX(p.x).toFixed(2)} ${scaleY(yval(p)).toFixed(2)}`).join(' ');
-        const areaPath = `${path} L ${scaleX(points[points.length - 1].x).toFixed(2)} ${zeroY.toFixed(2)} L ${scaleX(points[0].x).toFixed(2)} ${zeroY.toFixed(2)} Z`;
-        svg.appendChild(make('path', { d: areaPath, fill, opacity: 0.24 }));
-        svg.appendChild(make('path', { d: path, fill: 'none', stroke, 'stroke-width': 2.2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
+        const curve = pts => pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${scaleX(p.x).toFixed(2)} ${scaleY(yval(p)).toFixed(2)}`).join(' ');
+        const drawOne = pts => {
+            const path = curve(pts);
+            const areaPath = `${path} L ${scaleX(pts[pts.length - 1].x).toFixed(2)} ${zeroY.toFixed(2)} L ${scaleX(pts[0].x).toFixed(2)} ${zeroY.toFixed(2)} Z`;
+            svg.appendChild(make('path', { d: areaPath, fill, opacity: 0.24 }));
+            svg.appendChild(make('path', { d: path, fill: 'none', stroke, 'stroke-width': 2.2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
+        };
+        drawOne(points);
+        if (hasLower) drawOne(lowerPoints);
 
         const yLabelTop = make('text', { x: 6, y: top + 10, fill: '#64748b', 'font-size': 10, 'font-family': 'JetBrains Mono, monospace' });
         yLabelTop.textContent = (invert ? -maxY : maxY).toFixed(2);
@@ -259,8 +266,8 @@
 
     const supportPositions = [{% for pos in result.summary.support_positions %}{{ pos|default:0 }}{% if not forloop.last %}, {% endif %}{% endfor %}];
     const supportLabels = [{% for label in result.summary.support_labels %}"{{ label }}"{% if not forloop.last %}, {% endif %}{% endfor %}];
-    drawDiagram('shearDiagramSvg', [{% for p in result.summary.shear_diagram.points %}{ x: {{ p.x|floatformat:6 }}, y: {{ p.y|floatformat:6 }} }{% if not forloop.last %}, {% endif %}{% endfor %}], supportPositions, supportLabels, '#dc2626', '#fca5a5');
-    drawDiagram('momentDiagramSvg', [{% for p in result.summary.moment_diagram.points %}{ x: {{ p.x|floatformat:6 }}, y: {{ p.y|floatformat:6 }} }{% if not forloop.last %}, {% endif %}{% endfor %}], supportPositions, supportLabels, '#2563eb', '#93c5fd');
+    drawDiagram('shearDiagramSvg', [{% for p in result.summary.shear_diagram.points %}{ x: {{ p.x|floatformat:6 }}, y: {{ p.y|floatformat:6 }} }{% if not forloop.last %}, {% endif %}{% endfor %}], supportPositions, supportLabels, '#dc2626', '#fca5a5', false, [{% for p in result.summary.shear_diagram.lower %}{ x: {{ p.x|floatformat:6 }}, y: {{ p.y|floatformat:6 }} }{% if not forloop.last %}, {% endif %}{% endfor %}]);
+    drawDiagram('momentDiagramSvg', [{% for p in result.summary.moment_diagram.points %}{ x: {{ p.x|floatformat:6 }}, y: {{ p.y|floatformat:6 }} }{% if not forloop.last %}, {% endif %}{% endfor %}], supportPositions, supportLabels, '#2563eb', '#93c5fd', false, [{% for p in result.summary.moment_diagram.lower %}{ x: {{ p.x|floatformat:6 }}, y: {{ p.y|floatformat:6 }} }{% if not forloop.last %}, {% endif %}{% endfor %}]);
     drawDiagram('deflectionLiveDiagramSvg', [{% for p in result.summary.deflection_live_diagram.points %}{ x: {{ p.x|floatformat:6 }}, y: {{ p.y|floatformat:6 }} }{% if not forloop.last %}, {% endif %}{% endfor %}], supportPositions, supportLabels, '#16a34a', '#86efac', true);
     drawDiagram('deflectionTotalDiagramSvg', [{% for p in result.summary.deflection_total_diagram.points %}{ x: {{ p.x|floatformat:6 }}, y: {{ p.y|floatformat:6 }} }{% if not forloop.last %}, {% endif %}{% endfor %}], supportPositions, supportLabels, '#7c3aed', '#c4b5fd', true);
 })();

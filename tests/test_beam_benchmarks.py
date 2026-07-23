@@ -874,6 +874,36 @@ def test_connection_steel_side_plate_nds_12_3_3():
     assert double.z == pytest.approx(2 * steel.z, rel=1e-6)
 
 
+def test_pattern_live_load_envelope_two_span():
+    # Two equal spans L, uniform live w on the member. Classic results:
+    #   max positive span moment under skip loading = 49/512 w L^2
+    #     (one span loaded; propped-cantilever behavior), vs only
+    #     9/128 w L^2 = 0.0703 wL^2 with both spans loaded.
+    #   max negative support moment = w L^2 / 8 (both spans loaded).
+    from engine import patterns as P
+    from engine.loads import UniformLoad
+
+    L, w = 10.0, 100.0
+    total = 2 * L
+    supports = [0.0, L, 2 * L]
+    live = [UniformLoad(w=w, load_type="live", start=0.0, end=2 * L)]
+
+    xs, upper, lower = P.moment_envelope(total, [], live, supports)
+    assert max(upper) == pytest.approx(49 / 512 * w * L * L, rel=2e-3)   # 957 ft-lb
+    assert min(lower) == pytest.approx(-w * L * L / 8, rel=1e-3)          # -1250 ft-lb
+
+    # Loading both spans fully (no pattern) under-predicts the positive
+    # moment: 9/128 wL^2 = 703 ft-lb, ~26% below the pattern value.
+    _, full_upper, _ = P.moment_envelope(total, live, [], supports)
+    assert max(full_upper) == pytest.approx(9 / 128 * w * L * L, rel=2e-3)
+    assert max(upper) > 1.3 * max(full_upper)
+
+    # Shear envelope peak is the interior-support shear, 5/8 wL, captured by
+    # loading both spans (already in the full-load case).
+    _, v_up, v_lo = P.shear_envelope(total, [], live, supports)
+    assert P.peak_abs(v_up, v_lo) == pytest.approx(5 / 8 * w * L, rel=2e-3)
+
+
 def test_off_center_point_load_reactions():
     # 10 ft span, single 800 lb point load 4 ft from the left support.
     # R1 = P*b/L = 800*6/10 = 480 lb, R2 = P*a/L = 800*4/10 = 320 lb
@@ -1411,6 +1441,36 @@ def test_design_beam_three_span_mode_surfaces_both_interior_support_checks():
     assert any("B1-B2" in check.name for check in result.checks)
     assert any("B2-B3" in check.name for check in result.checks)
     assert any("B3-B4" in check.name for check in result.checks)
+
+
+def test_design_beam_multi_span_uses_pattern_live_load():
+    # A continuous beam's live deflection must reflect skip (pattern)
+    # loading, which is larger than loading every span. The governing
+    # deflection combos are flagged "(pattern)", and the pattern live
+    # deflection exceeds the full-span value.
+    from engine import beam as beam_mod
+    section = Section.from_nominal("2x10")
+    loads = [UniformLoad(w=40, load_type="dead"), UniformLoad(w=120, load_type="live")]
+    result = design_beam(
+        12.0, loads, section, SPF_NO2, span_mode="inside",
+        continuous_spans=[12.0, 12.0], bearing_lengths=[1.5, 3.5, 1.5],
+    )
+    assert "(pattern)" in result.deflection_live.governing_combo
+    assert "(pattern)" in result.deflection_total.governing_combo
+
+    # Full-span live deflection in span 1 (both spans loaded) is much smaller
+    # than the pattern (one-span-loaded) value the design now reports.
+    supports = result.summary.support_positions
+    live = [UniformLoad(w=120, load_type="live", start=0.0, end=24.0)]
+    full_span_live = beam_mod.max_deflection_between(24.0, live, SPF_NO2.E, section.I, 0.0, 12.0, supports)
+    assert result.deflection_live.demand > 1.3 * full_span_live
+
+    # Moment/shear diagrams carry a max-negative envelope curve (`lower`).
+    assert result.summary.moment_diagram.lower is not None
+    assert result.summary.shear_diagram.lower is not None
+    # A single-span design has no envelope lower curve.
+    single = design_beam(12.0, loads, section, SPF_NO2, span_mode="inside")
+    assert single.summary.moment_diagram.lower is None
 
 
 def test_design_beam_two_span_mode_allows_end_overhangs_and_surfaces_tip_checks():

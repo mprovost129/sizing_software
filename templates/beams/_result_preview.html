@@ -128,7 +128,12 @@
     const W = 600, H = 170;
     const margin = 75;
     const beamY = 100;
-    const beamH = 20;
+    // Beam depth scales with the member's actual dressed depth (in) so a
+    // 2x12 reads visibly deeper than a 2x6, clamped to a sensible on-screen
+    // band. section.d is the real depth from the engine (works for any
+    // sawn/LVL/glulam section).
+    const depthIn = Number({{ result.summary.section.d|default:5.5 }});
+    const beamH = Math.round(Math.min(36, Math.max(16, depthIn * 2.5 + 6)));
     const beamX1 = margin;
     const beamX2 = W - margin;
     const beamLen = beamX2 - beamX1;
@@ -188,19 +193,31 @@
     defs.appendChild(beamGrad);
     svg.appendChild(defs);
 
-    // Beam graphic as its own layer (beam_viewer.svg, stretch-safe), kept
-    // separate from the bearing symbols so each can be swapped independently.
-    svg.appendChild(el('image', {
+    // Beam body drawn as a fixed-pixel rect with the depth gradient rather
+    // than the stretched beam_viewer.svg image -- that image's border band
+    // scales with the drawing and reads as a thin flat line at wide/shallow
+    // aspect ratios (per its own header note). A solid rect shows the depth
+    // clearly at every span/depth. Section label centered on the beam.
+    svg.appendChild(el('rect', {
         x: beamX1, y: beamY - beamH / 2,
         width: beamLen, height: beamH,
-        href: "{% static 'images/beam_viewer.svg' %}",
-        preserveAspectRatio: 'none'
+        fill: 'url(#beamGrad)', stroke: '#0f2038', 'stroke-width': 1, rx: 2
     }));
+    if (beamH >= 20) {
+        svg.appendChild(txt((beamX1 + beamX2) / 2, beamY + 4, '{{ result.summary.section.label }}', {
+            'text-anchor': 'middle', fill: '#ffffff', 'font-size': 10, 'font-weight': '700', 'letter-spacing': '0.05em'
+        }));
+    }
 
+    // Left depth callout: a bracket spanning the beam depth, labelled with
+    // the actual dressed depth (in) -- a real dimension, not a repeat of the
+    // section name shown centered on the beam.
     svg.appendChild(el('line', { x1: beamX1 - 8, y1: beamY - beamH / 2, x2: beamX1 - 8, y2: beamY + beamH / 2, stroke: '#9ca3af', 'stroke-width': 1 }));
     svg.appendChild(el('line', { x1: beamX1 - 12, y1: beamY - beamH / 2, x2: beamX1 - 4, y2: beamY - beamH / 2, stroke: '#9ca3af', 'stroke-width': 1 }));
     svg.appendChild(el('line', { x1: beamX1 - 12, y1: beamY + beamH / 2, x2: beamX1 - 4, y2: beamY + beamH / 2, stroke: '#9ca3af', 'stroke-width': 1 }));
-    svg.appendChild(txt(beamX1 - 14, beamY + 4, '{{ result.summary.section.nominal }}', { 'text-anchor': 'end', fill: '#6b7280', 'font-size': 9 }));
+    svg.appendChild(txt(beamX1 - 14, beamY + 4, '{{ result.summary.section.d|floatformat:2 }}"', {
+        'text-anchor': 'end', fill: '#6b7280', 'font-size': 9, 'font-family': 'JetBrains Mono, monospace'
+    }));
 
     const segmentDimY = beamY + beamH / 2 + 28;
     const totalDimY = segmentDimY + 18;

@@ -28,6 +28,7 @@ MVP requirement).
 from dataclasses import dataclass, field, replace
 
 from . import beam as beam_mod
+from . import patterns as pattern_mod
 from .factors import (
     DRY_SERVICE_FACTORS,
     LOAD_DURATION_FACTORS,
@@ -128,6 +129,10 @@ class DiagramSeries:
     peak_x: float
     peak_y: float
     points: list[DiagramPoint]
+    # For continuous beams, moment/shear are drawn as a pattern (skip)
+    # live-load ENVELOPE: `lower` holds the max-negative curve and `points`
+    # the max-positive curve. `lower` is None for single-curve diagrams.
+    lower: list[DiagramPoint] | None = None
 
 
 @dataclass
@@ -402,16 +407,28 @@ def design_beam(
             Emin=material.Emin * cm.emin,
         )
 
-    bending, stability = _governing_bending(
-        total_length, loads, section, material, cf, cr, combinations, support_positions,
-        unbraced_length, glulam_cv,
-    )
+    pb = None
+    if is_multi_span:
+        # Continuous beam: pre-solve each elementary load case once, then
+        # assemble every combination's pattern (skip) live-load envelope by
+        # superposition. Captures the max positive span moment and max
+        # negative support moment that full-span loading misses.
+        pb = pattern_mod.PatternedBeam(total_length, loads, support_positions, material.E, section.I)
+        bending, stability, shear = _governing_bending_shear_pattern(
+            pb, section, material, cf, cr, combinations,
+            unbraced_length, glulam_cv, notch_factor, notch_label,
+        )
+    else:
+        bending, stability = _governing_bending(
+            total_length, loads, section, material, cf, cr, combinations, support_positions,
+            unbraced_length, glulam_cv,
+        )
+        shear = _governing_shear(
+            total_length, loads, section, material, combinations, support_positions,
+            notch_factor=notch_factor, notch_label=notch_label,
+        )
     summary.cl = stability.cl
     summary.rb = stability.rb
-    shear = _governing_shear(
-        total_length, loads, section, material, combinations, support_positions,
-        notch_factor=notch_factor, notch_label=notch_label,
-    )
     bearing_checks = [
         _bearing_check(total_length, loads, section, material, length, i, support_positions)
         for i, length in enumerate(bearing_lengths)
@@ -419,6 +436,7 @@ def design_beam(
     live_checks, total_checks = _span_deflection_checks(
         total_length, loads, section, material,
         deflection_limit_live, deflection_limit_total, support_positions, creep_factor,
+        pb=pb,
     )
 
     result = BeamDesignResult(
@@ -444,38 +462,52 @@ def design_beam(
     if left_overhang > 0:
         result.deflection_left_cantilever_live = _transient_cantilever_deflection_check(
             total_length, loads, section, material,
-            support_positions, "left", left_overhang, cantilever_deflection_limit_live,
+            support_positions, "left", left_overhang, cantilever_deflection_limit_live, pb,
         )
         result.deflection_left_cantilever_total = _cantilever_deflection_check(
             total_length, loads, section, material, ("dead", "live", "snow", "roof_live", "wind"),
             support_positions, "left", left_overhang, cantilever_deflection_limit_total,
-            "Total-load deflection (left cantilever tip)",
+            "Total-load deflection (left cantilever tip)", pb,
         )
     if right_overhang > 0:
         result.deflection_right_cantilever_live = _transient_cantilever_deflection_check(
             total_length, loads, section, material,
-            support_positions, "right", right_overhang, cantilever_deflection_limit_live,
+            support_positions, "right", right_overhang, cantilever_deflection_limit_live, pb,
         )
         result.deflection_right_cantilever_total = _cantilever_deflection_check(
             total_length, loads, section, material, ("dead", "live", "snow", "roof_live", "wind"),
             support_positions, "right", right_overhang, cantilever_deflection_limit_total,
-            "Total-load deflection (right cantilever tip)",
+            "Total-load deflection (right cantilever tip)", pb,
         )
 
-    summary.shear_diagram = _diagram_series_from_combo(
-        "Shear diagram", "lb", result.shear.governing_combo, total_length, loads, support_positions, "shear",
-    )
-    summary.moment_diagram = _diagram_series_from_combo(
-        "Moment diagram", "ft-lb", result.bending.governing_combo, total_length, loads, support_positions, "moment",
-    )
-    summary.deflection_live_diagram = _deflection_diagram_series(
-        result.deflection_live.name, "in", _transient_load_types_present(loads),
-        total_length, loads, section, material, support_positions,
-    )
-    summary.deflection_total_diagram = _deflection_diagram_series(
-        result.deflection_total.name, "in", ("dead", "live", "snow", "roof_live", "wind"),
-        total_length, loads, section, material, support_positions,
-    )
+    if is_multi_span:
+        summary.shear_diagram = _envelope_diagram_series(
+            "Shear envelope", "lb", result.shear.governing_combo, pb, "shear",
+        )
+        summary.moment_diagram = _envelope_diagram_series(
+            "Moment envelope", "ft-lb", result.bending.governing_combo, pb, "moment",
+        )
+        summary.deflection_live_diagram = _pattern_deflection_diagram_series(
+            result.deflection_live.name, "in", _transient_load_types_present(loads), pb,
+        )
+        summary.deflection_total_diagram = _pattern_deflection_diagram_series(
+            result.deflection_total.name, "in", ("dead", "live", "snow", "roof_live", "wind"), pb,
+        )
+    else:
+        summary.shear_diagram = _diagram_series_from_combo(
+            "Shear diagram", "lb", result.shear.governing_combo, total_length, loads, support_positions, "shear",
+        )
+        summary.moment_diagram = _diagram_series_from_combo(
+            "Moment diagram", "ft-lb", result.bending.governing_combo, total_length, loads, support_positions, "moment",
+        )
+        summary.deflection_live_diagram = _deflection_diagram_series(
+            result.deflection_live.name, "in", _transient_load_types_present(loads),
+            total_length, loads, section, material, support_positions,
+        )
+        summary.deflection_total_diagram = _deflection_diagram_series(
+            result.deflection_total.name, "in", ("dead", "live", "snow", "roof_live", "wind"),
+            total_length, loads, section, material, support_positions,
+        )
 
     return result
 
@@ -548,6 +580,46 @@ def _diagram_series_from_combo(name, unit, combo_name, total_length, loads, supp
             peak_x = x
             peak_y = y
     return DiagramSeries(name=name, unit=unit, governing_combo=combo_name, peak_x=peak_x, peak_y=peak_y, points=points)
+
+
+def _envelope_diagram_series(name, unit, combo_name, pb, quantity):
+    """Moment/shear diagram for a continuous beam as a pattern (skip)
+    live-load envelope: `points` = max-positive curve, `lower` = max-negative
+    curve. Peak is the larger magnitude of the two. Assembled from the
+    pre-solved PatternedBeam."""
+    combo = next((c for c in DEFAULT_COMBINATIONS if c.name == combo_name), None)
+    load_types = combo.load_types if combo else ()
+    xs, m_up, m_lo, v_up, v_lo = pb.moment_shear_envelope(load_types)
+    if quantity == "moment":
+        upper, lower = m_up, m_lo
+    else:
+        xs = [x for x, _ in pb.v_samples]
+        upper, lower = v_up, v_lo
+    upper_points = [DiagramPoint(x=x, y=y) for x, y in zip(xs, upper)]
+    lower_points = [DiagramPoint(x=x, y=y) for x, y in zip(xs, lower)]
+    peak_x = peak_y = 0.0
+    for x, y in [*zip(xs, upper), *zip(xs, lower)]:
+        if abs(y) > abs(peak_y):
+            peak_x, peak_y = x, y
+    return DiagramSeries(
+        name=name, unit=unit, governing_combo=f"{combo_name} (pattern)",
+        peak_x=peak_x, peak_y=peak_y, points=upper_points, lower=lower_points,
+    )
+
+
+def _pattern_deflection_diagram_series(name, unit, load_types, pb):
+    """Live/total deflection diagram for a continuous beam: the worst
+    downward deflection at each point over all live-load patterns."""
+    env = pb.deflection_envelope(load_types)
+    points = [DiagramPoint(x=x, y=y) for x, y in zip(pb.xs, env)]
+    peak_x = peak_y = 0.0
+    for x, y in zip(pb.xs, env):
+        if abs(y) > abs(peak_y):
+            peak_x, peak_y = x, y
+    return DiagramSeries(
+        name=name, unit=unit, governing_combo="/".join(load_types) + " (pattern)",
+        peak_x=peak_x, peak_y=peak_y, points=points,
+    )
 
 
 def _deflection_diagram_series(name, unit, load_types, total_length, loads, section, material, support_positions):
@@ -636,6 +708,46 @@ def _governing_shear(total_length, loads, section, material, combinations, suppo
         if best is None or ratio > best.ratio:
             best = CheckResult(name, fv, fv_allow, ratio, combo.name, ratio <= 1.0)
     return best
+
+
+def _governing_bending_shear_pattern(
+    pb, section, material, cf, cr, combinations, unbraced_length, glulam_cv, notch_factor, notch_label,
+):
+    """Governing bending and shear for a CONTINUOUS (multi-span) beam, using
+    the pattern (skip) live-load envelope (IBC 1607.12 / ASCE 7). The design
+    moment and shear are the worst over all live-load patterns -- not just
+    all spans loaded -- assembled by superposition from the pre-solved
+    ``PatternedBeam`` (no per-combination re-solving).
+    """
+    best_b = best_stability = best_v = None
+    v_name = "Shear" + (f" (end notch: {notch_label})" if notch_factor < 1.0 else "")
+    for combo in combinations:
+        _, m_up, m_lo, v_up, v_lo = pb.moment_shear_envelope(combo.load_types)
+        # Bending: design moment = worst |M| over all patterns.
+        m_in_lb = pattern_mod.peak_abs(m_up, m_lo) * 12
+        fb = m_in_lb / section.S
+        fb_star = material.Fb * cf * cr * combo.cd
+        stability = beam_stability_factor(unbraced_length, section.d, section.b, material.Emin, fb_star)
+        bending_factor = min(glulam_cv, stability.cl) if glulam_cv is not None else stability.cl
+        fb_allow = fb_star * bending_factor
+        b_ratio = fb / fb_allow
+        if best_b is None or b_ratio > best_b.ratio:
+            best_b = CheckResult("Bending", fb, fb_allow, b_ratio, combo.name, b_ratio <= 1.0)
+            best_stability = stability
+        # Shear: design shear = worst |V| over all patterns.
+        fv = 1.5 * pattern_mod.peak_abs(v_up, v_lo) / section.A
+        fv_allow = material.Fv * combo.cd * notch_factor
+        v_ratio = fv / fv_allow if fv_allow else 999.0
+        if best_v is None or v_ratio > best_v.ratio:
+            best_v = CheckResult(v_name, fv, fv_allow, v_ratio, combo.name, v_ratio <= 1.0)
+    if best_stability and best_stability.over_slender:
+        best_b = CheckResult(
+            f"Bending -- RB = {best_stability.rb:.0f} EXCEEDS NDS SLENDERNESS LIMIT OF 50: "
+            "more lateral bracing of the compression edge or a wider member is required",
+            demand=best_b.demand, capacity=best_b.capacity, ratio=max(best_b.ratio, 999.0),
+            governing_combo=best_b.governing_combo, passed=False,
+        )
+    return best_b, best_stability, best_v
 
 
 def _hole_shear_check(total_length, loads, section, material, combinations, support_positions, hole_diameter, hole_location):
@@ -740,22 +852,52 @@ def _total_deflection_check(total_length, loads, section, material, total_limit,
     return CheckResult(label, delta, allow, ratio, combo, ratio <= 1.0)
 
 
-def _span_deflection_checks(total_length, loads, section, material, live_limit, total_limit, support_positions, creep_factor=1.0):
+def _span_deflection_checks(total_length, loads, section, material, live_limit, total_limit, support_positions, creep_factor=1.0, pb=None):
     present = _transient_load_types_present(loads)
     labels = {"live": "Live", "snow": "Snow", "roof_live": "Roof live", "wind": "Wind"}
     live_name = "/".join(labels[t] for t in present) + "-load deflection"
     live_checks = []
     total_checks = []
-    for i, (x1, x2) in enumerate(zip(support_positions, support_positions[1:])):
-        span_label = f" (B{i + 1}-B{i + 2})" if len(support_positions) > 2 else ""
-        live_checks.append(_back_span_deflection_check(
-            total_length, loads, section, material, present, live_limit,
-            live_name + span_label, x1, x2, support_positions,
-        ))
-        total_checks.append(_total_deflection_check(
-            total_length, loads, section, material, total_limit,
-            "Total-load deflection" + span_label, x1, x2, support_positions, creep_factor,
-        ))
+
+    if pb is not None:
+        # Continuous beam: the worst downward deflection in each span occurs
+        # under the pattern that loads that span's live load (and alternate
+        # spans), which full-span loading under-predicts. Assembled from the
+        # pre-solved elementary load cases -- no re-solving here.
+        total_types = ("dead", "live", "snow", "roof_live", "wind")
+        dead = _filter(loads, ("dead",))
+        for i, (x1, x2) in enumerate(zip(support_positions, support_positions[1:])):
+            span_label = f" (B{i + 1}-B{i + 2})" if len(support_positions) > 2 else ""
+            back_span = x2 - x1
+            live_delta = pb.max_downward_between(present, x1, x2)
+            live_allow = (back_span * 12) / live_limit
+            live_checks.append(CheckResult(
+                live_name + span_label, live_delta, live_allow,
+                live_delta / live_allow, "/".join(present) + " (pattern)", live_delta <= live_allow))
+            total_delta = pb.max_downward_between(total_types, x1, x2)
+            total_label = "Total-load deflection" + span_label
+            total_combo = "D+L+S+Lr+W (pattern)"
+            if creep_factor > 1.0:
+                delta_dead = beam_mod.max_deflection_between(
+                    total_length, dead, material.E, section.I, x1, x2, support_positions)
+                total_delta += (creep_factor - 1.0) * delta_dead
+                total_label += f" (long-term, Kcr={creep_factor:g})"
+                total_combo = "Kcr*D + L+S+Lr+W (pattern)"
+            total_allow = (back_span * 12) / total_limit
+            total_checks.append(CheckResult(
+                total_label, total_delta, total_allow, total_delta / total_allow,
+                total_combo, total_delta <= total_allow))
+    else:
+        for i, (x1, x2) in enumerate(zip(support_positions, support_positions[1:])):
+            span_label = f" (B{i + 1}-B{i + 2})" if len(support_positions) > 2 else ""
+            live_checks.append(_back_span_deflection_check(
+                total_length, loads, section, material, present, live_limit,
+                live_name + span_label, x1, x2, support_positions,
+            ))
+            total_checks.append(_total_deflection_check(
+                total_length, loads, section, material, total_limit,
+                "Total-load deflection" + span_label, x1, x2, support_positions, creep_factor,
+            ))
     live_checks.sort(key=lambda c: c.ratio, reverse=True)
     total_checks.sort(key=lambda c: c.ratio, reverse=True)
     return live_checks, total_checks
@@ -770,21 +912,26 @@ def _span_deflection_checks(total_length, loads, section, material, live_limit, 
 CANTILEVER_EFFECTIVE_SPAN_FACTOR = 2.0
 
 
-def _transient_cantilever_deflection_check(total_length, loads, section, material, support_positions, side, overhang, limit_denominator):
+def _transient_cantilever_deflection_check(total_length, loads, section, material, support_positions, side, overhang, limit_denominator, pb=None):
     present = _transient_load_types_present(loads)
     labels = {"live": "Live", "snow": "Snow", "roof_live": "Roof live", "wind": "Wind"}
     label = "/".join(labels[t] for t in present) + f"-load deflection ({side} cantilever tip)"
     return _cantilever_deflection_check(
-        total_length, loads, section, material, present, support_positions, side, overhang, limit_denominator, label,
+        total_length, loads, section, material, present, support_positions, side, overhang, limit_denominator, label, pb,
     )
 
 
-def _cantilever_deflection_check(total_length, loads, section, material, load_types, support_positions, side, overhang, limit_denominator, label):
+def _cantilever_deflection_check(total_length, loads, section, material, load_types, support_positions, side, overhang, limit_denominator, label, pb=None):
     active = _filter(loads, load_types)
-    delta = beam_mod.tip_deflection(
-        total_length, active, material.E, section.I, side=side, support_positions=support_positions,
-    )
+    if pb is not None:
+        delta = pb.tip_deflection(load_types, side)
+        combo = "/".join(load_types) + " (pattern)"
+    else:
+        delta = beam_mod.tip_deflection(
+            total_length, active, material.E, section.I, side=side, support_positions=support_positions,
+        )
+        combo = "/".join(load_types)
     effective_span_in = CANTILEVER_EFFECTIVE_SPAN_FACTOR * overhang * 12
     allow = effective_span_in / limit_denominator
     ratio = delta / allow
-    return CheckResult(label, delta, allow, ratio, "/".join(load_types), ratio <= 1.0)
+    return CheckResult(label, delta, allow, ratio, combo, ratio <= 1.0)

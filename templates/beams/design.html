@@ -1675,17 +1675,19 @@ function renderGeometryPreview(targetSvg) {
     const scaleX = value => beamX1 + (beamLen * value / totalLength);
     const supportXs = supportPositions.map(scaleX);
 
-    // Beam graphic: beam_viewer.svg is stretch-safe (preserveAspectRatio
-    // none) so it fills the beam band directly. Kept as its own layer,
-    // separate from the bearings (drawSupport, below), so each can be
-    // swapped independently.
-    targetSvg.appendChild(el('image', {
+    // Beam body drawn as a fixed-pixel rect with the depth gradient rather
+    // than the stretched beam_viewer.svg image -- that image's border band
+    // scales with the drawing and reads as a thin flat line at wide/shallow
+    // aspect ratios. A solid rect shows the depth clearly at every span.
+    targetSvg.appendChild(el('rect', {
         x: beamX1,
         y: beamY - beamH / 2,
         width: beamLen,
         height: beamH,
-        href: "{% static 'images/beam_viewer.svg' %}",
-        preserveAspectRatio: 'none'
+        fill: `url(#${targetSvg.id}-beam-grad)`,
+        stroke: '#0f2038',
+        'stroke-width': 1,
+        rx: 2
     }));
 
     targetSvg.appendChild(txt((beamX1 + beamX2) / 2, beamY + 4, layout.nominalSize.toUpperCase(), {

@@ -292,9 +292,11 @@ def analyze(total_length, loads, a1=0.0, a2=None, support_positions=None) -> Bea
     )
 
 
-def _deflection_shape(total_length, loads, E, I, a1=0.0, a2=None, support_positions=None, samples_per_element=24):
-    supports = _normalize_support_positions(total_length, a1=a1, a2=a2, support_positions=support_positions)
-    solved = _solve_support_reactions(total_length, loads, supports, E=E, I=I)
+def _shape_from_solved(solved, samples_per_element=24):
+    """Reconstruct the sampled deflected shape (xs_ft, ys_in, downward-
+    positive) from an already-solved FEM system -- the Hermite cubic
+    interpolation between nodes. Split out so a single solve can yield both
+    the reactions and the shape."""
     xs_ft = []
     ys_in = []
     node_positions_ft = solved["node_positions_ft"]
@@ -324,10 +326,28 @@ def _deflection_shape(total_length, loads, E, I, a1=0.0, a2=None, support_positi
     return xs_ft, ys_in
 
 
+def _deflection_shape(total_length, loads, E, I, a1=0.0, a2=None, support_positions=None, samples_per_element=24):
+    supports = _normalize_support_positions(total_length, a1=a1, a2=a2, support_positions=support_positions)
+    solved = _solve_support_reactions(total_length, loads, supports, E=E, I=I)
+    return _shape_from_solved(solved, samples_per_element)
+
+
 def deflection_shape(total_length, loads, E, I, support_positions):
     """Public accessor for the full sampled deflected shape: parallel
     lists (xs_ft, ys_in), downward-positive. Solves the FEM system once."""
     return _deflection_shape(total_length, loads, E, I, support_positions=support_positions)
+
+
+def reactions_and_shape(total_length, loads, E, I, support_positions):
+    """One FEM solve returning BOTH the support reactions (list, in support
+    order) and the sampled deflected shape (xs_ft, ys_in, downward-positive).
+    Lets continuous-beam pattern analysis get statics and deflection from a
+    single solve per load case."""
+    supports = _normalize_support_positions(total_length, support_positions=support_positions)
+    solved = _solve_support_reactions(total_length, loads, supports, E=E, I=I)
+    reactions = [solved["support_reactions"][x] for x in supports]
+    xs_ft, ys_in = _shape_from_solved(solved)
+    return reactions, xs_ft, ys_in
 
 
 def max_deflection_between(total_length, loads, E, I, x1, x2, support_positions):

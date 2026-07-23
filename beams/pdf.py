@@ -146,7 +146,9 @@ def _diagram_drawing(series, summary, title, width=6.7 * inch, height=1.75 * inc
         return drawing
 
     total_length = max(summary.total_length, 1e-9)
-    max_abs_y = max(abs(point.y) for point in series.points) or 1.0
+    lower = getattr(series, "lower", None)
+    all_points = list(series.points) + list(lower) if lower else series.points
+    max_abs_y = max(abs(point.y) for point in all_points) or 1.0
 
     def sx(x):
         return axis_x1 + (plot_w * (x / total_length))
@@ -162,10 +164,15 @@ def _diagram_drawing(series, summary, title, width=6.7 * inch, height=1.75 * inc
         drawing.add(Line(x, axis_y_bottom, x, axis_y_top, strokeColor=colors.HexColor("#cbd5e1"), strokeWidth=0.6))
         drawing.add(String(x - 7, axis_y_bottom - 12, label, fontName="Helvetica-Bold", fontSize=7, fillColor=SLATE))
 
-    points = []
-    for point in series.points:
-        points.extend([sx(point.x), sy(point.y)])
-    drawing.add(PolyLine(points, strokeColor=BLUE, strokeWidth=1.3))
+    def _polyline(series_points):
+        coords = []
+        for point in series_points:
+            coords.extend([sx(point.x), sy(point.y)])
+        drawing.add(PolyLine(coords, strokeColor=BLUE, strokeWidth=1.3))
+
+    _polyline(series.points)
+    if lower:  # continuous-beam envelope: draw the max-negative curve too
+        _polyline(lower)
 
     peak_x = sx(series.peak_x)
     peak_y = sy(series.peak_y)
