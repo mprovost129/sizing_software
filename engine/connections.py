@@ -30,6 +30,22 @@ def dowel_bearing_strength(specific_gravity: float, diameter: float, perpendicul
     return 11200 * g
 
 
+# Dowel bearing strength Fe (psi) for steel side/main plates, NDS 12.3.3:
+# Fe = 1.5 x Fu. ASTM A36 Fu = 58 ksi -> 87,000; ASTM A572 Gr.50 / A992
+# Fu = 65 ksi -> 97,500. Steel bearing is direction-independent (isotropic),
+# so the parallel/perpendicular wood formulas do not apply.
+STEEL_DOWEL_BEARING = {
+    "a36": 87000.0,
+    "a572": 97500.0,
+}
+
+
+def steel_dowel_bearing(grade: str) -> float:
+    """Dowel bearing strength Fe (psi) for a steel plate, NDS 12.3.3
+    (Fe = 1.5 x Fu). ``grade`` is "a36" or "a572"."""
+    return STEEL_DOWEL_BEARING[grade]
+
+
 def _reduction_term(diameter: float, mode: str, angle_deg: float) -> float:
     """Rd, NDS Table 12.3.1B. For D <= 0.25 in it is Kd; for larger dowels
     it depends on the yield mode and the maximum load-to-grain angle."""
@@ -160,6 +176,18 @@ def temperature_factor(temperature: str, wet: bool) -> float:
     return 1.0
 
 
+def edge_distance_minimum(diameter: float, perpendicular: bool) -> float:
+    """Minimum edge distance (in), NDS 2018 Table 12.5.1A, for a single row
+    of larger dowels (D >= 0.25 in). Toward a loaded edge -- the edge the
+    load acts toward under perpendicular-to-grain loading -- the minimum is
+    4D; otherwise (parallel loading, or an unloaded edge) it is 1.5D.
+    Small-diameter dowels (nails/screws, D < 0.25 in) are not tabulated
+    (edge distance is governed by splitting/good practice) -- returns 0.0."""
+    if diameter < 0.25:
+        return 0.0
+    return 4.0 * diameter if perpendicular else 1.5 * diameter
+
+
 def double_shear_z(diameter: float, fyb: float, lm: float, ls: float, fem: float, fes: float, angle_deg: float = 0.0) -> DowelYield:
     """Reference lateral design value Z for a single dowel in DOUBLE shear
     (a symmetric three-member connection: one main/middle member of
@@ -204,6 +232,9 @@ class ConnectionResult:
     n_fasteners: int
     perpendicular: bool
     double_shear: bool = False
+    edge_min: float = 0.0    # required edge distance (in), NDS Table 12.5.1A; 0 = not checked
+    edge_ok: bool = True     # provided edge distance >= edge_min (or not checked)
+    side_steel: bool = False  # side member is a steel plate (Fes from NDS 12.3.3)
 
 
 def withdrawal_value(fastener_type: str, specific_gravity: float, diameter: float) -> float:
@@ -296,6 +327,8 @@ def design_connection(
     fastener_type: str = "",
     toe_nail: bool = False,
     temperature: str = "normal",
+    edge_distance: float | None = None,
+    side_fe: float | None = None,
 ) -> ConnectionResult:
     """Design a single-shear dowel connection for an applied lateral load.
     ``main_thickness``/``side_thickness`` are the member dowel bearing
@@ -305,9 +338,11 @@ def design_connection(
     CDelta is applied. Otherwise those default to 1.0. Load duration CD
     always applies; the wet service factor CM when ``wet``; the toe-nail
     factor Ctn = 0.83 when ``toe_nail`` and ``fastener_type`` is a nail/spike;
-    and the temperature factor Ct when ``temperature`` is elevated."""
+    and the temperature factor Ct when ``temperature`` is elevated. If
+    ``side_fe`` is given the side member is a steel plate and that dowel
+    bearing strength (NDS 12.3.3) is used directly instead of a wood value."""
     fem = dowel_bearing_strength(main_specific_gravity, diameter, perpendicular)
-    fes = dowel_bearing_strength(side_specific_gravity, diameter, perpendicular)
+    fes = side_fe if side_fe else dowel_bearing_strength(side_specific_gravity, diameter, perpendicular)
     yield_fn = double_shear_z if double_shear else single_shear_z
     yld = yield_fn(diameter, fyb, main_thickness, side_thickness, fem, fes, angle_deg)
 
@@ -319,12 +354,18 @@ def design_connection(
     ctn = toe_nail_factor(fastener_type, toe_nail, withdrawal=False)
     ct = temperature_factor(temperature, wet)
 
+    edge_min = edge_distance_minimum(diameter, perpendicular)
+    edge_ok = True
+    if edge_distance and edge_min:
+        edge_ok = edge_distance >= edge_min - 1e-9
+
     z_adjusted = yld.z * cd * cm * ctn * ct * cg * c_delta
     capacity = n_fasteners * z_adjusted
     ratio = load_lb / capacity if capacity else 999.0
     return ConnectionResult(
         z=yld.z, z_adjusted=z_adjusted, capacity=capacity, demand=load_lb, ratio=ratio,
-        passed=ratio <= 1.0, mode=yld.mode, yield_result=yld, cd=cd, cg=cg, c_delta=c_delta,
-        cm=cm, ctn=ctn, ct=ct, n_fasteners=n_fasteners, perpendicular=perpendicular,
-        double_shear=double_shear,
+        passed=ratio <= 1.0 and edge_ok, mode=yld.mode, yield_result=yld, cd=cd, cg=cg,
+        c_delta=c_delta, cm=cm, ctn=ctn, ct=ct, n_fasteners=n_fasteners, perpendicular=perpendicular,
+        double_shear=double_shear, edge_min=edge_min if edge_distance else 0.0, edge_ok=edge_ok,
+        side_steel=side_fe is not None,
     )

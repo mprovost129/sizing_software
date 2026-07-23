@@ -36,9 +36,11 @@
 {% else %}
 {% with y=result.yield_result %}
 <div class="fc-card" style="margin-top:1rem;">
-    <div class="verdict-banner verdict-banner--{% if result.demand and not result.passed %}fail{% else %}pass{% endif %}" style="padding:0.9rem 1.25rem;">
+    <div class="verdict-banner verdict-banner--{% if not result.edge_ok or result.demand and not result.passed %}fail{% else %}pass{% endif %}" style="padding:0.9rem 1.25rem;">
         <p class="verdict-title">
-            {% if result.demand %}
+            {% if not result.edge_ok %}
+                <i class="bi bi-x-circle-fill"></i> Not permitted &mdash; edge distance below minimum
+            {% elif result.demand %}
                 {% if result.passed %}<i class="bi bi-check-circle-fill"></i> PASS{% else %}<i class="bi bi-x-circle-fill"></i> FAIL{% endif %}
                 &mdash; demand/capacity {{ result.ratio|floatformat:3 }}
             {% else %}
@@ -50,6 +52,11 @@
             Z' = Z &times; C<sub>D</sub>({{ result.cd }}){% if result.cm < 1 %} &times; C<sub>M</sub>({{ result.cm|floatformat:2 }}){% endif %}{% if result.ctn < 1 %} &times; C<sub>tn</sub>({{ result.ctn|floatformat:2 }}){% endif %}{% if result.ct < 1 %} &times; C<sub>t</sub>({{ result.ct|floatformat:2 }}){% endif %}{% if result.cg < 1 %} &times; C<sub>g</sub>({{ result.cg|floatformat:3 }}){% endif %}{% if result.c_delta < 1 %} &times; C<sub>&Delta;</sub>({{ result.c_delta|floatformat:3 }}){% endif %} = {{ result.z_adjusted|floatformat:0 }} lb/fastener &middot;
             {{ result.n_fasteners }} fastener{{ result.n_fasteners|pluralize }} = {{ result.capacity|floatformat:0 }} lb
         </p>
+        {% if not result.edge_ok %}
+        <p class="verdict-sub" style="font-size:0.8rem;margin-top:0.35rem;">
+            <i class="bi bi-exclamation-triangle-fill"></i> Edge distance is below the NDS Table 12.5.1A minimum of {{ result.edge_min|floatformat:2 }} in ({% if result.perpendicular %}4D, loaded edge{% else %}1.5D{% endif %}) &mdash; increase the edge distance or the connection is not permitted as detailed.
+        </p>
+        {% endif %}
     </div>
     <div class="fc-card-body">
         <div class="stat-row">
@@ -76,8 +83,10 @@
             </tbody>
         </table>
         <p style="font-size:0.74rem;color:var(--fc-text-muted);margin-top:0.75rem;">
-            Z' applies load duration C<sub>D</sub>, the wet service factor C<sub>M</sub> (NDS Table 11.3.3, 0.7 laterally when wet), the toe-nail factor C<sub>tn</sub> (NDS 12.5.4, 0.83 for toe-nailed nails/spikes), the temperature factor C<sub>t</sub> (NDS Table 11.3.4), and the group-action C<sub>g</sub> and geometry C<sub>&Delta;</sub> factors when their inputs are given. Edge-distance requirements are not yet applied.
+            Z' applies load duration C<sub>D</sub>, the wet service factor C<sub>M</sub> (NDS Table 11.3.3, 0.7 laterally when wet), the toe-nail factor C<sub>tn</sub> (NDS 12.5.4, 0.83 for toe-nailed nails/spikes), the temperature factor C<sub>t</sub> (NDS Table 11.3.4), and the group-action C<sub>g</sub> and geometry C<sub>&Delta;</sub> factors when their inputs are given.
+            {% if result.edge_min %}Edge distance checked against the NDS Table 12.5.1A minimum of {{ result.edge_min|floatformat:2 }} in{% if result.edge_ok %} &mdash; adequate{% endif %}.{% endif %}
             {% if result.double_shear %}Double shear (main member between two side members).{% else %}Single-shear, two-member connection.{% endif %}
+            {% if result.side_steel %}<br>Side member is a steel plate; F<sub>es</sub> is the steel dowel bearing strength (NDS 12.3.3, F<sub>e</sub> = 1.5F<sub>u</sub>). The steel plate itself must also be checked per AISC (net section, bearing, block shear) &mdash; not evaluated here.{% endif %}
         </p>
     </div>
 </div>

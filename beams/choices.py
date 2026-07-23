@@ -67,6 +67,19 @@ LOAD_DIRECTION_CHOICES = [
     ("perpendicular", "Perpendicular to grain"),
 ]
 
+# Side member type: a wood species or a steel plate (NDS 12.3.3 dowel
+# bearing Fe = 1.5*Fu for steel; direction-independent).
+SIDE_MEMBER_TYPE_CHOICES = [
+    ("wood", "Wood"),
+    ("steel", "Steel plate"),
+]
+DEFAULT_SIDE_MEMBER_TYPE = "wood"
+STEEL_GRADE_CHOICES = [
+    ("a36", "ASTM A36 (Fu 58 ksi, Fe 87,000)"),
+    ("a572", "ASTM A572 Gr.50 / A992 (Fu 65 ksi, Fe 97,500)"),
+]
+DEFAULT_STEEL_GRADE = "a36"
+
 # Load-duration factor CD (NDS Table 2.3.2) as a selectable value.
 CONNECTION_CD_CHOICES = [
     (0.9, "Dead / permanent (CD = 0.9)"),

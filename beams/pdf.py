@@ -752,7 +752,10 @@ def _connection_design_story(connection, result, styles):
         f"<b>Fastener:</b> {connection.get_fastener_type_display()}, {connection.diameter_in:g} in dia, "
         f"Fyb = {connection.fyb_psi:g} psi &middot; {shear}",
         f"<b>Main member:</b> {get_material(connection.main_material).name}, {connection.main_thickness_in:g} in",
-        f"<b>Side member:</b> {get_material(connection.side_material).name}, {connection.side_thickness_in:g} in",
+        (f"<b>Side member:</b> {connection.get_steel_grade_display()} steel plate, "
+         f"{connection.side_thickness_in:g} in (Fe = {result.yield_result.fes:.0f} psi, NDS 12.3.3)"
+         if connection.side_type == "steel"
+         else f"<b>Side member:</b> {get_material(connection.side_material).name}, {connection.side_thickness_in:g} in"),
         f"<b>Loading:</b> {connection.get_load_direction_display()}, "
         f"{connection.get_service_condition_display()}"
         + (", toe-nailed" if connection.toe_nail else "")
@@ -785,9 +788,15 @@ def _connection_design_story(connection, result, styles):
         notes += f" Ctn = {result.ctn:.2f} (NDS 12.5.4, toe-nail)."
     if result.ct < 1:
         notes += f" Ct = {result.ct:.2f} (NDS Table 11.3.4, temperature)."
+    if result.edge_min:
+        edge_word = "adequate" if result.edge_ok else "BELOW MINIMUM - not permitted"
+        notes += (f" Edge distance vs NDS Table 12.5.1A minimum {result.edge_min:.2f} in: {edge_word}.")
+    if result.side_steel:
+        notes += (" Side member is a steel plate (Fes per NDS 12.3.3); check the plate itself "
+                  "per AISC (net section, bearing, block shear) separately.")
     story.append(Paragraph(
         f"<b>Governing:</b> mode {result.mode}, Z = {result.z:.0f} lb. {verdict}. "
-        f"Z' = Z x CD x CM x Ctn x Ct x Cg x CDelta.{notes} Edge distance not applied.",
+        f"Z' = Z x CD x CM x Ctn x Ct x Cg x CDelta.{notes}",
         styles["Normal"],
     ))
     return story

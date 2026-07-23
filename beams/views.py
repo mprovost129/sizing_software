@@ -656,10 +656,11 @@ class ColumnDesignExportPDFView(LoginRequiredMixin, View):
 
 _CONNECTION_FIELDS = (
     "loading", "shear_planes", "fastener_type", "diameter_in", "fyb_psi",
-    "main_material", "main_thickness_in", "side_material", "side_thickness_in",
+    "main_material", "main_thickness_in", "side_type", "steel_grade",
+    "side_material", "side_thickness_in",
     "load_direction", "toe_nail", "service_condition", "temperature",
     "load_duration", "n_fasteners", "load_lb",
-    "fastener_spacing_in", "main_width_in", "side_width_in", "end_distance_in",
+    "fastener_spacing_in", "main_width_in", "side_width_in", "end_distance_in", "edge_distance_in",
 )
 
 

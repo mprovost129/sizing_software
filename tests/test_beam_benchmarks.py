@@ -817,6 +817,63 @@ def test_connection_temperature_factor_nds_11_3_4():
     assert w.ct == 0.8
 
 
+def test_connection_edge_distance_minimum_nds_12_5_1a():
+    # NDS Table 12.5.1A edge distance for D >= 0.25 dowels: 1.5D parallel /
+    # unloaded, 4D toward a loaded (perpendicular-to-grain) edge. Nails
+    # (D < 0.25) are not tabulated.
+    from engine import design_connection, edge_distance_minimum
+
+    assert edge_distance_minimum(0.5, perpendicular=False) == pytest.approx(0.75)   # 1.5D
+    assert edge_distance_minimum(0.5, perpendicular=True) == pytest.approx(2.0)     # 4D
+    assert edge_distance_minimum(0.131, perpendicular=False) == 0.0                 # nail: n/a
+
+    # Adequate edge -> passes; below the minimum -> not permitted even though
+    # the yield-limit ratio alone would pass.
+    ok = design_connection(0.5, 45000, 3.5, 1.5, 0.5, 0.5, 2000, cd=1.0, n_fasteners=4, edge_distance=1.0)
+    assert ok.edge_ok is True and ok.edge_min == pytest.approx(0.75)
+    assert ok.passed is True
+
+    bad = design_connection(0.5, 45000, 3.5, 1.5, 0.5, 0.5, 2000, cd=1.0, n_fasteners=4, edge_distance=0.5)
+    assert bad.edge_ok is False
+    assert bad.ratio == pytest.approx(0.813, abs=0.01)  # yield check alone would pass
+    assert bad.passed is False                          # but edge distance fails it
+
+    # No edge distance entered -> not checked (edge_min reported as 0).
+    none = design_connection(0.5, 45000, 3.5, 1.5, 0.5, 0.5, 2000, cd=1.0, n_fasteners=4)
+    assert none.edge_ok is True and none.edge_min == 0.0
+
+
+def test_connection_steel_side_plate_nds_12_3_3():
+    # Steel dowel bearing Fe = 1.5*Fu: A36 (Fu=58) -> 87,000; A572 (Fu=65) -> 97,500.
+    from engine import design_connection, steel_dowel_bearing
+
+    assert steel_dowel_bearing("a36") == pytest.approx(87000.0)
+    assert steel_dowel_bearing("a572") == pytest.approx(97500.0)
+
+    # 1/2" bolt, DF-L main (lm=3.5, Fem=5600), 1/4" A36 steel side plate,
+    # parallel. Fes = 87,000 is used directly (not a wood formula). Hand calc:
+    #   Im   = 0.5*3.5*5600/4              = 2450
+    #   Is   = 0.5*0.25*87000/4           = 2719
+    #   IIIs = 7.793*0.5*0.25*5600/(2.064*3.2) = 826  <- governs
+    steel = design_connection(0.5, 45000, 3.5, 0.25, 0.5, 0.5, 0, cd=1.0, side_fe=87000)
+    assert steel.side_steel is True
+    assert steel.yield_result.fes == pytest.approx(87000.0)
+    assert steel.yield_result.mode_values["Im"] == pytest.approx(2450.0, abs=1.0)
+    assert steel.yield_result.mode_values["Is"] == pytest.approx(2718.75, abs=1.0)
+    assert steel.mode == "IIIs"
+    assert steel.z == pytest.approx(825.7, abs=1.0)
+
+    # A thin steel side plate outperforms the same-thickness wood side member,
+    # which would crush (mode Is) at a far lower load.
+    wood = design_connection(0.5, 45000, 3.5, 0.25, 0.5, 0.5, 0, cd=1.0)
+    assert wood.side_steel is False
+    assert steel.z > wood.z
+
+    # Double shear (two steel side plates) doubles the single-plate value.
+    double = design_connection(0.5, 45000, 3.5, 0.25, 0.5, 0.5, 0, cd=1.0, side_fe=87000, double_shear=True)
+    assert double.z == pytest.approx(2 * steel.z, rel=1e-6)
+
+
 def test_off_center_point_load_reactions():
     # 10 ft span, single 800 lb point load 4 ft from the left support.
     # R1 = P*b/L = 800*6/10 = 480 lb, R2 = P*a/L = 800*4/10 = 320 lb

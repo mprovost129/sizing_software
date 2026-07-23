@@ -55,10 +55,10 @@
                 {% else %}
                 <div><div class="saved-input-label">F<sub>yb</sub> &middot; load to grain</div><div class="saved-input-value">{{ connection.fyb_psi|floatformat:0 }} &middot; {{ connection.get_load_direction_display }}</div></div>
                 <div><div class="saved-input-label">Main member</div><div class="saved-input-value">{{ result.yield_result.fem|floatformat:0 }} psi F<sub>e</sub> &middot; {{ connection.main_thickness_in|floatformat:2 }}"</div></div>
-                <div><div class="saved-input-label">Side member</div><div class="saved-input-value">{{ result.yield_result.fes|floatformat:0 }} psi F<sub>e</sub> &middot; {{ connection.side_thickness_in|floatformat:2 }}"</div></div>
-                {% if connection.fastener_spacing_in or connection.end_distance_in %}
+                <div><div class="saved-input-label">Side member</div><div class="saved-input-value">{% if connection.side_type == 'steel' %}{{ connection.get_steel_grade_display }} plate{% else %}wood{% endif %} &middot; {{ result.yield_result.fes|floatformat:0 }} psi F<sub>e</sub> &middot; {{ connection.side_thickness_in|floatformat:2 }}"</div></div>
+                {% if connection.fastener_spacing_in or connection.end_distance_in or connection.edge_distance_in %}
                 <div style="grid-column:span 2;"><div class="saved-input-label">Group / geometry</div><div class="saved-input-value">
-                    {% if connection.fastener_spacing_in %}spacing {{ connection.fastener_spacing_in|floatformat:2 }}"{% endif %}{% if connection.end_distance_in %} &middot; end {{ connection.end_distance_in|floatformat:2 }}"{% endif %} &middot; C<sub>g</sub> {{ result.cg|floatformat:3 }} &middot; C<sub>&Delta;</sub> {{ result.c_delta|floatformat:3 }}
+                    {% if connection.fastener_spacing_in %}spacing {{ connection.fastener_spacing_in|floatformat:2 }}"{% endif %}{% if connection.end_distance_in %} &middot; end {{ connection.end_distance_in|floatformat:2 }}"{% endif %}{% if connection.edge_distance_in %} &middot; edge {{ connection.edge_distance_in|floatformat:2 }}"{% if result.edge_min %} (min {{ result.edge_min|floatformat:2 }}"{% if not result.edge_ok %} &mdash; BELOW MIN{% endif %}){% endif %}{% endif %} &middot; C<sub>g</sub> {{ result.cg|floatformat:3 }} &middot; C<sub>&Delta;</sub> {{ result.c_delta|floatformat:3 }}
                 </div></div>
                 {% endif %}
                 {% endif %}

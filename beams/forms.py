@@ -16,6 +16,8 @@ from .choices import (
     DEFAULT_MATERIAL,
     DEFAULT_PLIES,
     DEFAULT_SERVICE_CONDITION,
+    DEFAULT_SIDE_MEMBER_TYPE,
+    DEFAULT_STEEL_GRADE,
     END_CONDITION_CHOICES,
     FASTENER_TYPE_CHOICES,
     LOAD_DIRECTION_CHOICES,
@@ -26,8 +28,10 @@ from .choices import (
     PERFORMANCE_PROFILE_CHOICES,
     PLY_CHOICES,
     SERVICE_CONDITION_CHOICES,
+    SIDE_MEMBER_TYPE_CHOICES,
     SIZE_CATEGORY,
     SPAN_MODE_CHOICES,
+    STEEL_GRADE_CHOICES,
     SUBFLOOR_PROFILE_CHOICES,
     SUPPORT_TYPE_CHOICES,
     UNIFORM_LOAD_BASIS_FORM_CHOICES,
@@ -484,12 +488,20 @@ class ConnectionDesignForm(forms.Form):
         label="Main member thickness / penetration (in)", min_value=0.25, initial=3.5,
         widget=forms.NumberInput(attrs={"class": "fc-input", "step": "any"}),
     )
+    side_type = forms.ChoiceField(
+        label="Side member type", choices=SIDE_MEMBER_TYPE_CHOICES, initial=DEFAULT_SIDE_MEMBER_TYPE,
+        widget=forms.Select(attrs={"class": "fc-select", "onchange": "toggleSideType()"}),
+    )
+    steel_grade = forms.ChoiceField(
+        label="Steel grade", choices=STEEL_GRADE_CHOICES, initial=DEFAULT_STEEL_GRADE, required=False,
+        widget=forms.Select(attrs={"class": "fc-select"}),
+    )
     side_material = forms.ChoiceField(
         label="Side member species", choices=MATERIAL_CHOICES, initial=DEFAULT_MATERIAL,
         widget=forms.Select(attrs={"class": "fc-select"}),
     )
     side_thickness_in = forms.FloatField(
-        label="Side member thickness (in)", min_value=0.25, initial=1.5,
+        label="Side member / plate thickness (in)", min_value=0.06, initial=1.5,
         widget=forms.NumberInput(attrs={"class": "fc-input", "step": "any"}),
     )
     loading = forms.ChoiceField(
@@ -546,6 +558,10 @@ class ConnectionDesignForm(forms.Form):
     end_distance_in = forms.FloatField(
         label="End distance (in)", min_value=0, required=False,
         widget=forms.NumberInput(attrs={"class": "fc-input", "step": "any", "placeholder": "for CDelta"}),
+    )
+    edge_distance_in = forms.FloatField(
+        label="Edge distance (in)", min_value=0, required=False,
+        widget=forms.NumberInput(attrs={"class": "fc-input", "step": "any", "placeholder": "adequacy check"}),
     )
 
 

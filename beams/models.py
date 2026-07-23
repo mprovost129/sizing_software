@@ -15,6 +15,7 @@ from engine import (
     design_connection,
     design_withdrawal,
     get_material,
+    steel_dowel_bearing,
 )
 from engine.checks import BeamDesignResult
 
@@ -32,6 +33,8 @@ from .choices import (
     DEFAULT_MATERIAL,
     DEFAULT_PLIES,
     DEFAULT_SERVICE_CONDITION,
+    DEFAULT_SIDE_MEMBER_TYPE,
+    DEFAULT_STEEL_GRADE,
     END_CONDITION_CHOICES,
     FASTENER_TYPE_CHOICES,
     LOAD_DIRECTION_CHOICES,
@@ -42,7 +45,9 @@ from .choices import (
     PLY_CHOICES,
     SERVICE_CONDITION_CHOICES,
     SHEAR_PLANES_CHOICES,
+    SIDE_MEMBER_TYPE_CHOICES,
     SPAN_MODE_CHOICES,
+    STEEL_GRADE_CHOICES,
     SUBFLOOR_PROFILE_CHOICES,
     SUPPORT_TYPE_CHOICES,
 )
@@ -465,6 +470,10 @@ class ConnectionDesign(models.Model):
     fyb_psi = models.FloatField()
     main_material = models.CharField(max_length=20, choices=MATERIAL_CHOICES, default=DEFAULT_MATERIAL)
     main_thickness_in = models.FloatField()
+    side_type = models.CharField(
+        max_length=8, choices=SIDE_MEMBER_TYPE_CHOICES, default=DEFAULT_SIDE_MEMBER_TYPE,
+    )
+    steel_grade = models.CharField(max_length=8, choices=STEEL_GRADE_CHOICES, default=DEFAULT_STEEL_GRADE)
     side_material = models.CharField(max_length=20, choices=MATERIAL_CHOICES, default=DEFAULT_MATERIAL)
     side_thickness_in = models.FloatField()
     load_direction = models.CharField(max_length=14, choices=LOAD_DIRECTION_CHOICES, default="parallel")
@@ -482,6 +491,7 @@ class ConnectionDesign(models.Model):
     main_width_in = models.FloatField(null=True, blank=True)
     side_width_in = models.FloatField(null=True, blank=True)
     end_distance_in = models.FloatField(null=True, blank=True)
+    edge_distance_in = models.FloatField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -508,8 +518,13 @@ class ConnectionDesign(models.Model):
                 temperature=self.temperature,
             )
         double = self.shear_planes == "double"
+        steel_side = self.side_type == "steel"
+        side_fe = steel_dowel_bearing(self.steel_grade) if steel_side else None
+        # E for the side member's axial stiffness in the group-action factor:
+        # 29,000,000 psi for a steel plate, else the wood species modulus.
+        side_e = 29_000_000.0 if steel_side else side_mat.E
         ea_main = main_mat.E * self.main_thickness_in * self.main_width_in if self.main_width_in else None
-        ea_side = side_mat.E * self.side_thickness_in * self.side_width_in if self.side_width_in else None
+        ea_side = side_e * self.side_thickness_in * self.side_width_in if self.side_width_in else None
         if ea_side and double:
             ea_side *= 2
         return design_connection(
@@ -519,6 +534,7 @@ class ConnectionDesign(models.Model):
             side_thickness=self.side_thickness_in,
             main_specific_gravity=main_mat.G,
             side_specific_gravity=side_mat.G,
+            side_fe=side_fe,
             load_lb=self.load_lb or 0,
             cd=self.load_duration or 1.0,
             n_fasteners=self.n_fasteners,
@@ -533,4 +549,5 @@ class ConnectionDesign(models.Model):
             fastener_type=self.fastener_type,
             toe_nail=self.toe_nail,
             temperature=self.temperature,
+            edge_distance=self.edge_distance_in or None,
         )

@@ -22,6 +22,7 @@ class ConnectionDesignerTests(TestCase):
             "fyb_psi": 45000,
             "main_material": "dfl_no2",
             "main_thickness_in": 3.5,
+            "side_type": "wood",
             "side_material": "dfl_no2",
             "side_thickness_in": 1.5,
             "load_direction": "parallel",
@@ -134,6 +135,40 @@ class ConnectionDesignerTests(TestCase):
         result = conn.compute_result()
         self.assertEqual(result.ct, 0.5)
         self.assertEqual(result.cm, 0.7)
+
+    def test_edge_distance_below_minimum_fails(self):
+        # 1/2" bolt needs 0.75" (1.5D) edge; 0.5" is below the minimum.
+        bad = self._post(action="run", edge_distance_in=0.5).context["result"]
+        self.assertFalse(bad.edge_ok)
+        self.assertFalse(bad.passed)  # not permitted even though the ratio passes
+        ok = self._post(action="run", edge_distance_in=1.0).context["result"]
+        self.assertTrue(ok.edge_ok)
+        self.assertTrue(ok.passed)
+
+    def test_edge_distance_saved_and_recomputed(self):
+        self._post(action="save", name="Edge Fail", edge_distance_in=0.5)
+        conn = ConnectionDesign.objects.get(name="Edge Fail")
+        self.assertEqual(conn.edge_distance_in, 0.5)
+        self.assertFalse(conn.compute_result().edge_ok)
+
+    def test_steel_side_plate_run(self):
+        # 1/2" bolt into a 1/4" A36 steel side plate -> Fes = 87,000 psi.
+        r = self._post(action="run", side_type="steel", steel_grade="a36",
+                       side_thickness_in=0.25).context["result"]
+        self.assertTrue(r.side_steel)
+        self.assertAlmostEqual(r.yield_result.fes, 87000.0, places=0)
+
+    def test_steel_side_plate_saved_detail_pdf(self):
+        self._post(action="save", name="Steel Plate Bolt", side_type="steel",
+                   steel_grade="a572", side_thickness_in=0.25)
+        conn = ConnectionDesign.objects.get(name="Steel Plate Bolt")
+        self.assertEqual(conn.side_type, "steel")
+        self.assertAlmostEqual(conn.compute_result().yield_result.fes, 97500.0, places=0)
+
+        detail = self.client.get(reverse("beams:connection_detail", args=[conn.pk]))
+        self.assertContains(detail, "steel")
+        pdf = self.client.get(reverse("beams:connection_export_pdf", args=[conn.pk]))
+        self.assertTrue(pdf.content.startswith(b"%PDF"))
 
     def test_connection_in_project_package(self):
         project = BeamProject.objects.create(user=self.user, name="Deck Job")
