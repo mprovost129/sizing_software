@@ -684,8 +684,11 @@ def render_column_design_pdf(column, result) -> bytes:
     buffer = io.BytesIO()
     doc = _pdf_document(buffer, column.name or f"Column design #{column.pk}")
     styles = getSampleStyleSheet()
+    story = _column_design_story(column, result, styles)
+    story.append(PageBreak())
+    story.extend(_basis_of_design_story(styles))
     doc.build(
-        _column_design_story(column, result, styles),
+        story,
         onFirstPage=_page_footer,
         onLaterPages=_page_footer,
     )
@@ -837,12 +840,57 @@ def render_connection_design_pdf(connection, result) -> bytes:
     buffer = io.BytesIO()
     doc = _pdf_document(buffer, connection.name or f"Connection design #{connection.pk}")
     styles = getSampleStyleSheet()
+    story = _connection_design_story(connection, result, styles)
+    story.append(PageBreak())
+    story.extend(_basis_of_design_story(styles))
     doc.build(
-        _connection_design_story(connection, result, styles),
+        story,
         onFirstPage=_page_footer,
         onLaterPages=_page_footer,
     )
     return buffer.getvalue()
+
+
+def _basis_of_design_story(styles):
+    """Standard basis-of-design and assumptions statement -- what a plan
+    reviewer looks for, and an honest statement of scope and limitations."""
+    section_label_style = ParagraphStyle(
+        "BasisLabel", parent=styles["Heading3"], textColor=NAVY, spaceAfter=6,
+    )
+    story = [Paragraph("Basis of Design &amp; Assumptions", section_label_style)]
+    items = [
+        "<b>Code:</b> Wood members and connections are designed to ANSI/AWC NDS-2018 (National "
+        "Design Specification for Wood Construction), Allowable Stress Design (ASD), with "
+        "reference design values from the 2018 NDS Supplement.",
+        "<b>Loads:</b> Dead, floor live, roof live, snow, and wind loads are as entered by the "
+        "user; the tool does not derive loads from occupancy, geometry, or ASCE 7 mapping. The "
+        "designer is responsible for the magnitude and application of all loads.",
+        "<b>Load combinations:</b> The following ASD combinations are checked, each at its "
+        "load-duration factor C<sub>D</sub> (NDS Table 2.3.2): D; D+L; D+S; D+Lr; D+W. "
+        "Combined-transient and 0.75-reduced combinations (ASCE 7 Section 2.4) are not generated "
+        "automatically; the designer must verify them where they govern.",
+        "<b>Analysis:</b> Members are analyzed as simple or continuous beams by numerical "
+        "stiffness (finite-element) analysis on the clear span(s). Continuous (multi-span) members "
+        "include pattern (skip) live loading per IBC 1607.12 / ASCE 7 Section 4.3.3.",
+        "<b>Adjustment factors:</b> Reference values are adjusted per NDS 4.3 / 11.3 as applicable "
+        "to each design (C<sub>D</sub> load duration, C<sub>M</sub> wet service, C<sub>t</sub> "
+        "temperature, C<sub>F</sub>/C<sub>V</sub> size, C<sub>r</sub> repetitive, C<sub>L</sub> "
+        "beam stability, and the C<sub>g</sub> / C<sub>&Delta;</sub> connection factors). The "
+        "factors applied are shown on each member's report.",
+        "<b>Serviceability:</b> Deflection limits are as shown per member (default L/360 live, "
+        "L/240 total per IBC Table 1604.3 unless a stricter limit was selected). Floor vibration "
+        "and camber are the designer's judgment unless explicitly noted.",
+        "<b>Scope &amp; limitations:</b> FrameCalc provides preliminary member sizing only. It "
+        "does not design the lateral force-resisting system, diaphragms, foundations, "
+        "fire-resistance ratings, or the load path beyond the member reactions shown, and checks "
+        "only the connections explicitly entered. These calculations are NOT a substitute for "
+        "review and seal by a licensed design professional. Verify all inputs, load paths, bearing "
+        "and hardware, and code applicability for the specific project.",
+    ]
+    for text in items:
+        story.append(Paragraph(text, styles["Normal"]))
+        story.append(Spacer(1, 5))
+    return story
 
 
 def render_beam_design_pdf(design, result) -> bytes:
@@ -850,11 +898,10 @@ def render_beam_design_pdf(design, result) -> bytes:
     buffer = io.BytesIO()
     doc = _pdf_document(buffer, design.name or f"Beam design #{design.pk}")
     styles = getSampleStyleSheet()
-    doc.build(
-        _beam_design_story(design, result, styles),
-        onFirstPage=_page_footer,
-        onLaterPages=_page_footer,
-    )
+    story = _beam_design_story(design, result, styles)
+    story.append(PageBreak())
+    story.extend(_basis_of_design_story(styles))
+    doc.build(story, onFirstPage=_page_footer, onLaterPages=_page_footer)
     return buffer.getvalue()
 
 
@@ -1001,6 +1048,10 @@ def render_project_pdf(project, design_results, issue=None, column_results=None,
             styles["Normal"],
         ),
     ])
+
+    # Basis of design & assumptions -- front matter on its own page.
+    story.append(PageBreak())
+    story.extend(_basis_of_design_story(styles))
 
     for design, result in design_results:
         story.append(PageBreak())

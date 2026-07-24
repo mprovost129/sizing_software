@@ -66,6 +66,7 @@ Completed in the live app:
 - Governing skip-load arrangement: continuous-beam results now report WHICH spans carry live load in the governing pattern -- for bending ("all spans" when the interior-support hogging governs, or the alternate/adjacent spans by label, e.g. "B1-B2, B3-B4") and for live deflection -- so the designer can reproduce the ASCE 7 / IBC 1607.12 pattern by hand. Derived from the sign of each span's contribution at the envelope peak (no extra solves); shown in the result preview and the PDF report; empty for single-span
 - Support reactions summary: a consolidated "Support Reactions" table (web result + PDF) gives the governing (maximum) downward reaction at each support, the governing load combination, and a net-uplift flag -- the value the designer needs to size the bearing / header / post / footing below. Previously reactions were only listed per-combination in the load-combinations table; this surfaces the max per support directly. Computed from the already-stored combination reactions (no extra solves) and verified against the classic continuous-beam coefficients (interior 1.25 wL, ends 0.375 wL for two equal spans)
 - Report identity / firm branding: a Settings page (nav gear) lets the signed-in user store their preparer / firm identity (name, firm/company, license no., phone, address) once on the User record. It then appears on every exported PDF -- a "Prepared by" line on each member report and a Firm / Prepared by / Contact block on the project package cover sheet -- so the output reads as a real engineering deliverable rather than an anonymous printout. Identity is per-user (set once), not per-project
+- Basis of design & assumptions page: every exported PDF now includes a standard "Basis of Design & Assumptions" section -- code (NDS-2018 ASD), user-entered loads disclaimer, the ASD load combinations checked, the numerical continuous-beam analysis method with IBC 1607.12 pattern loading, the adjustment factors applied, serviceability limits, and an honest scope/limitations statement (does not design LFRS, foundations, fire rating, or load path beyond the reactions shown; not a substitute for a licensed engineer's review and seal). It appears on its own page after the project package cover sheet and at the end of each standalone beam/column/connection report
 
 ## What Is Next
 
@@ -74,7 +75,7 @@ Recommended next build order:
 1. Continuous-beam refinements
    Optional unbalanced/partial snow patterns (only floor/roof live is patterned today).
 2. Engineering-report expansion
-   Build on the new report identity: an assumptions / basis-of-design page, optional firm logo, and later sealed-report style structure.
+   Optional firm logo upload; later sealed-report style structure.
 3. Loads tab expansion
    Continue refining saved-design workflows with project-level template sharing and selective load-template organization.
 4. Project-container expansion
