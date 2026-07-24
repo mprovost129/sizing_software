@@ -48,6 +48,16 @@ class SettingsViewTests(TestCase):
         from beams.pdf import _logo_flowable
         self.assertIsNone(_logo_flowable(self.user))
 
+    def test_signature_block_builds(self):
+        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.platypus import Table
+
+        from beams.pdf import _signature_block_story
+        # Builds for a bare user (blank identity) and one with identity.
+        for u in (self.user, get_user_model()(email="pe@x.com", first_name="Grace", license_number="SE 42")):
+            block = _signature_block_story(u, getSampleStyleSheet())
+            self.assertTrue(any(isinstance(f, Table) for f in block))
+
     @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
     def test_logo_upload_and_pdf_flowable(self):
         from reportlab.platypus import Image

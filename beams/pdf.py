@@ -717,6 +717,7 @@ def render_column_design_pdf(column, result) -> bytes:
     story = _column_design_story(column, result, styles)
     story.append(PageBreak())
     story.extend(_basis_of_design_story(styles))
+    story.extend(_signature_block_story(column.user, styles))
     doc.build(
         story,
         onFirstPage=_page_footer,
@@ -879,6 +880,7 @@ def render_connection_design_pdf(connection, result) -> bytes:
     story = _connection_design_story(connection, result, styles)
     story.append(PageBreak())
     story.extend(_basis_of_design_story(styles))
+    story.extend(_signature_block_story(connection.user, styles))
     doc.build(
         story,
         onFirstPage=_page_footer,
@@ -931,6 +933,56 @@ def _basis_of_design_story(styles):
     return story
 
 
+def _signature_block_story(user, styles):
+    """A preparer-certification block: the preparer's name and license, blank
+    signature/date lines, and a reserved space for a seal or stamp -- so a
+    printed package can be signed and sealed by the responsible professional."""
+    label_style = ParagraphStyle(
+        "SigLabel", parent=styles["Heading3"], textColor=NAVY, spaceAfter=6,
+    )
+    preparer = escape(user.preparer_name()) if user and user.has_report_identity() else ""
+    license_txt = (f"License / registration: {escape(user.license_number)}"
+                   if user and user.license_number else "License / registration: __________________________")
+    firm_txt = f"Firm: {escape(user.firm_name)}" if user and user.firm_name else ""
+    left = [
+        Paragraph(f"<b>Prepared by:</b> {preparer or '__________________________'}", styles["Normal"]),
+        Spacer(1, 14),
+        Paragraph(license_txt, styles["Normal"]),
+        Spacer(1, 14),
+        Paragraph("<b>Signature:</b> __________________________", styles["Normal"]),
+        Spacer(1, 14),
+        Paragraph("<b>Date:</b> ____________________", styles["Normal"]),
+    ]
+    if firm_txt:
+        left.extend([Spacer(1, 8), Paragraph(firm_txt, styles["Normal"])])
+    seal = [
+        Paragraph('<font color="#6b7280" size="8">SEAL / STAMP</font>', styles["Normal"]),
+        Spacer(1, 1.2 * inch),
+    ]
+    block = Table([[left, seal]], colWidths=[3.7 * inch, 2.6 * inch])
+    block.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 0.6, GRID),
+        ("LINEAFTER", (0, 0), (0, 0), 0.6, GRID),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 10),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+        ("TOPPADDING", (0, 0), (-1, -1), 10),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+    ]))
+    return [
+        Spacer(1, 16),
+        Paragraph("Preparer Certification", label_style),
+        block,
+        Spacer(1, 4),
+        Paragraph(
+            '<font color="#6b7280" size="8">FrameCalc output is preliminary sizing. Signing and '
+            "sealing this package, where required, is the responsibility of the licensed design "
+            "professional of record.</font>",
+            styles["Normal"],
+        ),
+    ]
+
+
 def render_beam_design_pdf(design, result) -> bytes:
     """Render one saved design and its computed result to PDF bytes."""
     buffer = io.BytesIO()
@@ -939,6 +991,7 @@ def render_beam_design_pdf(design, result) -> bytes:
     story = _beam_design_story(design, result, styles)
     story.append(PageBreak())
     story.extend(_basis_of_design_story(styles))
+    story.extend(_signature_block_story(design.user, styles))
     doc.build(story, onFirstPage=_page_footer, onLaterPages=_page_footer)
     return buffer.getvalue()
 
@@ -1091,9 +1144,11 @@ def render_project_pdf(project, design_results, issue=None, column_results=None,
         ),
     ])
 
-    # Basis of design & assumptions -- front matter on its own page.
+    # Basis of design & assumptions + preparer certification -- front matter
+    # on its own page.
     story.append(PageBreak())
     story.extend(_basis_of_design_story(styles))
+    story.extend(_signature_block_story(project.user, styles))
 
     for design, result in design_results:
         story.append(PageBreak())

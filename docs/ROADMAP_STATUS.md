@@ -70,13 +70,14 @@ Completed in the live app:
 
 - Partial snow loading (ASCE 7 Section 7.5): continuous beams are now checked with each span carrying either the FULL or HALF the balanced snow load -- the arrangement producing the maximum effect -- which full-snow-on-all-spans under-predicts (~13% low on the positive span moment in a 3-span example). It reuses the pattern superposition machinery with a third load category ("partial", off-state = half instead of skip's off-state = zero), so it costs no extra solves; the moment/shear/deflection envelopes and the governing-arrangement report ("full snow on B1-B2, half on the rest") all reflect it. Verified to match a brute-force enumeration of every full/half span arrangement exactly. Gated to multi-span snow; single-span and non-snow results unchanged
 - Firm logo on reports: the Settings page now takes a firm logo image (PNG/JPG, ImageField on the User). It is embedded on the project package cover sheet (prominent, with the firm name replacing the FrameCalc heading when set) and as a small letterhead-style logo on each member report header (beam, column, connection -- standalone and within a package). Aspect ratio is preserved into a max box; a missing or unreadable logo silently degrades (never breaks the report). This completes the report-branding trio: identity + basis-of-design + logo
+- Preparer certification / seal block: every exported PDF (standalone member reports and the project package) ends with a bordered "Preparer Certification" block -- the preparer's name and license (pre-filled from Settings), blank signature and date lines, and a reserved seal/stamp space -- with a note that signing and sealing is the responsibility of the licensed design professional of record. It makes a printed package ready to be signed and sealed
 
 ## What Is Next
 
 Recommended next build order:
 
 1. Engineering-report expansion
-   Later sealed-report style structure (signature/seal block, page-header letterhead on every page rather than just the first).
+   Per-page letterhead (firm identity in a header on every page, not just the first) via a canvas header callback bound to the preparer.
 2. Loads tab expansion
    Continue refining saved-design workflows with project-level template sharing and selective load-template organization.
 4. Project-container expansion
