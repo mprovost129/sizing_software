@@ -244,6 +244,46 @@ class PatternedBeam:
         up = base[ti] + sum(p[ti] for p in pieces if p[ti] < 0.0)
         return max(abs(down), abs(up))
 
+    def region_labels(self):
+        """Human label for each pattern region (span between supports, or a
+        cantilever), in the order pattern_regions() produces them."""
+        sup = [round(float(s), 6) for s in self.support_positions]
+        pos_to_idx = {s: i for i, s in enumerate(sup)}
+        labels = []
+        for a, b in pattern_regions(self.total_length, self.support_positions):
+            ia = pos_to_idx.get(round(a, 6))
+            ib = pos_to_idx.get(round(b, 6))
+            if ia is not None and ib is not None:
+                labels.append(f"B{ia + 1}-B{ib + 1}")
+            elif ia is None:
+                labels.append("left cant.")
+            else:
+                labels.append("right cant.")
+        return labels
+
+    def governing_pattern(self, load_types, key, x, positive):
+        """Describe the skip-load arrangement that governs `key` ("m" moment
+        or "d" deflection) at position `x`: the spans whose live load is on in
+        the worst pattern. Empty when the combination has no patternable load
+        (e.g. dead+snow governs)."""
+        patternable = sorted({cid[1] for cid, c in self.cases.items()
+                              if cid[0] in load_types and c["patternable"]})
+        if not patternable:
+            return ""
+        ti = min(range(len(self.xs)), key=lambda i: abs(self.xs[i] - x))
+        loaded = []
+        for cid, case in self.cases.items():
+            if cid[0] not in load_types or not case["patternable"]:
+                continue
+            val = case[key][ti]
+            if (positive and val > 1e-9) or (not positive and val < -1e-9):
+                loaded.append(cid[1])
+        loaded = sorted(set(loaded))
+        if not loaded or set(loaded) == set(patternable):
+            return "all spans"
+        labels = self.region_labels()
+        return ", ".join(labels[i] for i in loaded)
+
 
 def peak_abs(upper, lower):
     """Largest magnitude across the (upper, lower) envelope arrays."""

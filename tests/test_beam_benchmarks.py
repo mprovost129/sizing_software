@@ -1503,6 +1503,26 @@ def test_design_beam_multi_span_uses_pattern_live_load():
     # A single-span design has no envelope lower curve.
     single = design_beam(12.0, loads, section, SPF_NO2, span_mode="inside")
     assert single.summary.moment_diagram.lower is None
+    assert single.summary.pattern_bending == ""  # single-span: no pattern note
+
+
+def test_governing_skip_load_arrangement():
+    # The governing skip-load arrangement is reported so it can be reproduced
+    # by hand. Two equal spans: max moment is the interior-support hogging with
+    # BOTH spans loaded; max deflection is one span loaded.
+    section = Section.from_nominal("2x12")
+    loads = [UniformLoad(w=40, load_type="dead"), UniformLoad(w=120, load_type="live")]
+    two = design_beam(12.0, loads, section, SPF_NO2, span_mode="inside",
+                      continuous_spans=[12.0, 12.0], bearing_lengths=[1.5, 3.5, 1.5])
+    assert two.summary.pattern_bending == "all spans"          # both adjacent to the support
+    assert two.summary.pattern_deflection in ("B1-B2", "B2-B3")  # a single span loaded
+
+    # Three equal spans: bending at an interior support loads its two adjacent
+    # spans; live deflection follows the classic alternate-span pattern.
+    three = design_beam(12.0, loads, section, SPF_NO2, span_mode="inside",
+                        continuous_spans=[12.0, 12.0, 12.0], bearing_lengths=[1.5, 3.5, 3.5, 1.5])
+    assert "B1-B2" in three.summary.pattern_bending and "B2-B3" in three.summary.pattern_bending
+    assert three.summary.pattern_deflection == "B1-B2, B3-B4"
 
 
 def test_design_beam_two_span_mode_allows_end_overhangs_and_surfaces_tip_checks():

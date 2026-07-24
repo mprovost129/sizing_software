@@ -261,6 +261,13 @@ def _beam_design_story(design, result, styles):
         ]
         given_lines.append(f"<b>Analysis spans:</b> {' &middot; '.join(clear_labels)}")
         given_lines.append(f"<b>Continuous total length:</b> {result.summary.total_length:.2f} ft")
+        if result.summary.pattern_bending:
+            given_lines.append(
+                "<b>Skip (pattern) live load</b> (IBC 1607.12) &mdash; governing bending: live on "
+                f"{result.summary.pattern_bending}"
+                + (f"; deflection: live on {result.summary.pattern_deflection}"
+                   if result.summary.pattern_deflection else ""),
+            )
     elif design.span_mode != "inside":
         given_lines.append(
             f"<b>Span:</b> {design.span_ft:.2f} ft "

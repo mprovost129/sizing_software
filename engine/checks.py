@@ -184,6 +184,11 @@ class BeamSummary:
     moment_diagram: DiagramSeries | None = None
     deflection_live_diagram: DiagramSeries | None = None
     deflection_total_diagram: DiagramSeries | None = None
+    # Continuous beams only: which spans carry live load in the governing
+    # skip-loading pattern for bending and for live deflection (empty
+    # otherwise). Lets the designer reproduce the pattern by hand.
+    pattern_bending: str = ""
+    pattern_deflection: str = ""
 
 
 @dataclass
@@ -493,6 +498,15 @@ def design_beam(
         summary.deflection_total_diagram = _pattern_deflection_diagram_series(
             result.deflection_total.name, "in", ("dead", "live", "snow", "roof_live", "wind"), pb,
         )
+        # Which spans carry live load in the governing arrangement, so the
+        # designer can reproduce the pattern by hand.
+        b_combo = next((c for c in combinations if c.name == result.bending.governing_combo), None)
+        if b_combo:
+            md = summary.moment_diagram
+            summary.pattern_bending = pb.governing_pattern(b_combo.load_types, "m", md.peak_x, md.peak_y >= 0)
+        dl = summary.deflection_live_diagram
+        summary.pattern_deflection = pb.governing_pattern(
+            _transient_load_types_present(loads), "d", dl.peak_x, True)
     else:
         summary.shear_diagram = _diagram_series_from_combo(
             "Shear diagram", "lb", result.shear.governing_combo, total_length, loads, support_positions, "shear",
