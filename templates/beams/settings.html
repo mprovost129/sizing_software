@@ -15,17 +15,24 @@
     {% endfor %}
     {% endif %}
 
-    <form method="post" class="fc-card">
+    <form method="post" class="fc-card" enctype="multipart/form-data">
         {% csrf_token %}
         <div class="fc-card-header">
             <span class="fc-card-title"><i class="bi bi-person-badge"></i> Report Identity</span>
             <span style="font-size:0.72rem;color:var(--fc-text-muted);">Shown on exported calculation packages</span>
         </div>
         <div class="fc-card-body">
+            {% if form.instance.logo %}
+            <div class="fc-form-group">
+                <label class="fc-label">Current logo</label>
+                <img src="{{ form.instance.logo.url }}" alt="Firm logo" style="max-height:70px;max-width:260px;border:1px solid var(--fc-border,#e2e8f0);border-radius:6px;padding:6px;background:#fff;">
+            </div>
+            {% endif %}
             {% for field in form %}
             <div class="fc-form-group">
                 <label class="fc-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
                 {{ field }}
+                {% if field.name == 'logo' %}<p style="font-size:0.68rem;color:var(--fc-text-muted);margin:.2rem 0 0;">Appears on the report cover sheet and each member report header. Landscape logos read best; ~600px wide is plenty.</p>{% endif %}
                 {% for error in field.errors %}<p class="fc-field-error">{{ error }}</p>{% endfor %}
             </div>
             {% endfor %}

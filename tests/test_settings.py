@@ -1,6 +1,17 @@
+import tempfile
+from io import BytesIO
+
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import TestCase, override_settings
 from django.urls import reverse
+from PIL import Image as PILImage
+
+
+def _png_upload(name="logo.png", size=(120, 40)):
+    buffer = BytesIO()
+    PILImage.new("RGB", size, "white").save(buffer, "PNG")
+    return SimpleUploadedFile(name, buffer.getvalue(), content_type="image/png")
 
 
 class SettingsViewTests(TestCase):
@@ -32,3 +43,26 @@ class SettingsViewTests(TestCase):
     def test_preparer_name_falls_back_to_email(self):
         self.assertEqual(self.user.preparer_name(), "prep@example.com")
         self.assertFalse(self.user.has_report_identity())
+
+    def test_logo_flowable_none_without_logo(self):
+        from beams.pdf import _logo_flowable
+        self.assertIsNone(_logo_flowable(self.user))
+
+    @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+    def test_logo_upload_and_pdf_flowable(self):
+        from reportlab.platypus import Image
+
+        from beams.pdf import _logo_flowable
+        response = self.client.post(reverse("beams:settings"), {
+            "first_name": "Ada", "last_name": "Lovelace", "firm_name": "Lovelace Structural",
+            "license_number": "", "phone": "", "firm_address": "",
+            "logo": _png_upload(),
+        })
+        self.assertRedirects(response, reverse("beams:settings"))
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.logo)
+        self.assertIsNotNone(self.user.logo_path())
+        flowable = _logo_flowable(self.user)
+        self.assertIsInstance(flowable, Image)
+        # Aspect ratio preserved (120x40 = 3:1), scaled into the max box.
+        self.assertAlmostEqual(flowable.drawWidth / flowable.drawHeight, 3.0, places=1)

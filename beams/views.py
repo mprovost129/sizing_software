@@ -330,7 +330,7 @@ class SettingsView(LoginRequiredMixin, View):
         return render(request, self.template_name, {"form": UserSettingsForm(instance=request.user)})
 
     def post(self, request):
-        form = UserSettingsForm(request.POST, instance=request.user)
+        form = UserSettingsForm(request.POST, request.FILES, instance=request.user)
         if form.is_valid():
             form.save()
             messages.success(request, "Report identity saved.")

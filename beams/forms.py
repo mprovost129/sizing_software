@@ -570,7 +570,7 @@ class UserSettingsForm(forms.ModelForm):
     """Preparer / firm identity shown on calculation reports."""
     class Meta:
         model = get_user_model()
-        fields = ["first_name", "last_name", "firm_name", "license_number", "phone", "firm_address"]
+        fields = ["first_name", "last_name", "firm_name", "license_number", "phone", "firm_address", "logo"]
         labels = {
             "first_name": "First name",
             "last_name": "Last name",
@@ -578,6 +578,7 @@ class UserSettingsForm(forms.ModelForm):
             "license_number": "License no. (PE / SE)",
             "phone": "Phone",
             "firm_address": "Firm address",
+            "logo": "Firm logo (PNG / JPG)",
         }
         widgets = {
             "first_name": forms.TextInput(attrs={"class": "fc-input"}),
@@ -586,6 +587,7 @@ class UserSettingsForm(forms.ModelForm):
             "license_number": forms.TextInput(attrs={"class": "fc-input"}),
             "phone": forms.TextInput(attrs={"class": "fc-input"}),
             "firm_address": forms.TextInput(attrs={"class": "fc-input", "placeholder": "Street, city, state ZIP"}),
+            "logo": forms.ClearableFileInput(attrs={"class": "fc-input", "accept": "image/png,image/jpeg"}),
         }
 
 

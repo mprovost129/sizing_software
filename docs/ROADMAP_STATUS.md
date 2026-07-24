@@ -69,14 +69,15 @@ Completed in the live app:
 - Basis of design & assumptions page: every exported PDF now includes a standard "Basis of Design & Assumptions" section -- code (NDS-2018 ASD), user-entered loads disclaimer, the ASD load combinations checked, the numerical continuous-beam analysis method with IBC 1607.12 pattern loading, the adjustment factors applied, serviceability limits, and an honest scope/limitations statement (does not design LFRS, foundations, fire rating, or load path beyond the reactions shown; not a substitute for a licensed engineer's review and seal). It appears on its own page after the project package cover sheet and at the end of each standalone beam/column/connection report
 
 - Partial snow loading (ASCE 7 Section 7.5): continuous beams are now checked with each span carrying either the FULL or HALF the balanced snow load -- the arrangement producing the maximum effect -- which full-snow-on-all-spans under-predicts (~13% low on the positive span moment in a 3-span example). It reuses the pattern superposition machinery with a third load category ("partial", off-state = half instead of skip's off-state = zero), so it costs no extra solves; the moment/shear/deflection envelopes and the governing-arrangement report ("full snow on B1-B2, half on the rest") all reflect it. Verified to match a brute-force enumeration of every full/half span arrangement exactly. Gated to multi-span snow; single-span and non-snow results unchanged
+- Firm logo on reports: the Settings page now takes a firm logo image (PNG/JPG, ImageField on the User). It is embedded on the project package cover sheet (prominent, with the firm name replacing the FrameCalc heading when set) and as a small letterhead-style logo on each member report header (beam, column, connection -- standalone and within a package). Aspect ratio is preserved into a max box; a missing or unreadable logo silently degrades (never breaks the report). This completes the report-branding trio: identity + basis-of-design + logo
 
 ## What Is Next
 
 Recommended next build order:
 
 1. Engineering-report expansion
-   Optional firm logo upload; later sealed-report style structure.
-3. Loads tab expansion
+   Later sealed-report style structure (signature/seal block, page-header letterhead on every page rather than just the first).
+2. Loads tab expansion
    Continue refining saved-design workflows with project-level template sharing and selective load-template organization.
 4. Project-container expansion
    Add issue supersession/status controls and optional transmittal metadata for formal package workflows.

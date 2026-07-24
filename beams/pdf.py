@@ -18,7 +18,9 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
+from reportlab.lib.utils import ImageReader
 from reportlab.platypus import (
+    Image,
     PageBreak,
     Paragraph,
     SimpleDocTemplate,
@@ -55,6 +57,25 @@ def _table(data, col_widths=None):
     table = Table(data, colWidths=col_widths, hAlign="LEFT")
     table.setStyle(TableStyle(_TABLE_HEADER_STYLE))
     return table
+
+
+def _logo_flowable(user, max_w=1.9 * inch, max_h=0.62 * inch):
+    """A firm-logo Image scaled to fit a max box, preserving aspect ratio.
+    Returns None if the user has no logo or the file can't be read (a bad
+    logo must never break the report)."""
+    path = user.logo_path() if user else None
+    if not path:
+        return None
+    try:
+        iw, ih = ImageReader(path).getSize()
+        if not iw or not ih:
+            return None
+        scale = min(max_w / iw, max_h / ih)
+        img = Image(path, width=iw * scale, height=ih * scale)
+        img.hAlign = "LEFT"
+        return img
+    except Exception:
+        return None
 
 
 def _status_badge(text, passed, styles):
@@ -201,6 +222,9 @@ def _beam_design_story(design, result, styles):
         spaceAfter=6,
     )
 
+    logo = _logo_flowable(design.user)
+    if logo:
+        story.extend([logo, Spacer(1, 6)])
     title = design.name or f"Beam Design #{design.pk}"
     story.append(Paragraph(title, styles["Title"]))
     story.append(Paragraph(
@@ -544,6 +568,9 @@ def _beam_column_story(column, result, styles):
     )
     s = result.summary
 
+    logo = _logo_flowable(column.user)
+    if logo:
+        story.extend([logo, Spacer(1, 6)])
     story.append(Paragraph(column.name or f"Column Design #{column.pk}", styles["Title"]))
     story.append(Paragraph(
         f"{column.section_label} {s.material_name} &middot; {column.height_ft:g} ft beam-column &middot; "
@@ -620,6 +647,9 @@ def _column_design_story(column, result, styles):
     s = result.summary
     c = result.compression
 
+    logo = _logo_flowable(column.user)
+    if logo:
+        story.extend([logo, Spacer(1, 6)])
     story.append(Paragraph(column.name or f"Column Design #{column.pk}", styles["Title"]))
     story.append(Paragraph(
         f"{column.section_label} {s.material_name} &middot; {column.height_ft:g} ft column &middot; "
@@ -701,6 +731,9 @@ def _withdrawal_story(connection, result, styles):
     section_label_style = ParagraphStyle(
         "SectionLabel", parent=styles["Heading3"], textColor=NAVY, spaceAfter=6,
     )
+    logo = _logo_flowable(connection.user)
+    if logo:
+        story.extend([logo, Spacer(1, 6)])
     story.append(Paragraph(connection.name or f"Connection Design #{connection.pk}", styles["Title"]))
     story.append(Paragraph(
         f"{connection.get_fastener_type_display()} &middot; {connection.diameter_in:g} in dia &middot; "
@@ -767,6 +800,9 @@ def _connection_design_story(connection, result, styles):
     y = result.yield_result
     shear = "double shear (3-member)" if result.double_shear else "single shear (2-member)"
 
+    logo = _logo_flowable(connection.user)
+    if logo:
+        story.extend([logo, Spacer(1, 6)])
     story.append(Paragraph(connection.name or f"Connection Design #{connection.pk}", styles["Title"]))
     story.append(Paragraph(
         f"{connection.get_fastener_type_display()} &middot; {connection.diameter_in:g} in dia &middot; "
@@ -917,14 +953,18 @@ def render_project_pdf(project, design_results, issue=None, column_results=None,
     package_label = issue.label if issue else "Current Calculation Package"
     doc = _pdf_document(buffer, f"{project.name} - {package_label}")
     styles = getSampleStyleSheet()
-    story = [
-        Spacer(1, 0.35 * inch),
-        Paragraph("FrameCalc", styles["Heading2"]),
+    story = []
+    cover_logo = _logo_flowable(project.user, max_w=2.6 * inch, max_h=0.95 * inch)
+    if cover_logo:
+        story.extend([cover_logo, Spacer(1, 10)])
+    story.extend([
+        Spacer(1, 0.15 * inch if cover_logo else 0.35 * inch),
+        Paragraph(escape(project.user.firm_name) if project.user.firm_name else "FrameCalc", styles["Heading2"]),
         Paragraph(escape(project.name), styles["Title"]),
         Paragraph("Structural Member Calculation Package", styles["Heading2"]),
         Paragraph(escape(package_label), styles["Heading3"]),
         Spacer(1, 16),
-    ]
+    ])
 
     project_rows = [["Project Information", ""]]
     project_rows.append(["Project number", escape(project.project_number) if project.project_number else "Not entered"])

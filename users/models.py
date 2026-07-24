@@ -18,6 +18,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     license_number = models.CharField(max_length=60, blank=True)
     phone = models.CharField(max_length=40, blank=True)
     firm_address = models.CharField(max_length=255, blank=True)
+    logo = models.ImageField(upload_to="firm_logos/", blank=True, null=True)
 
     objects = UserManager()
 
@@ -40,6 +41,15 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def has_report_identity(self):
         return bool(self.firm_name or self.get_full_name() or self.license_number)
+
+    def logo_path(self):
+        """Local filesystem path to the firm logo, or None if unset/remote."""
+        if not self.logo:
+            return None
+        try:
+            return self.logo.path
+        except (NotImplementedError, ValueError):
+            return None
 
     def __str__(self):
         return self.email
