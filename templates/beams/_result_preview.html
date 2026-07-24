@@ -44,7 +44,7 @@
             <br><strong>Glulam:</strong> engineered member &mdash; volume factor C<sub>V</sub> (NDS 5.3.6) applied as the lesser of C<sub>V</sub> and C<sub>L</sub>, no C<sub>r</sub>, dry-service. Generic {{ result.summary.material_name }} values (balanced layup).
             {% endif %}
             {% if result.summary.pattern_bending %}
-            <br><strong>Skip (pattern) live load</strong> (IBC 1607.12) &mdash; governing bending arrangement: live on {{ result.summary.pattern_bending }}{% if result.summary.pattern_deflection %}; deflection: live on {{ result.summary.pattern_deflection }}{% endif %}.
+            <br><strong>Pattern loading</strong> (IBC 1607.12 / ASCE 7 &sect;7.5) &mdash; governing bending: {{ result.summary.pattern_bending }}{% if result.summary.pattern_deflection %}; deflection: {{ result.summary.pattern_deflection }}{% endif %}.
             {% endif %}
         </p>
     </div>

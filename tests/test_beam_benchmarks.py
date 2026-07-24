@@ -1535,15 +1535,59 @@ def test_governing_skip_load_arrangement():
     loads = [UniformLoad(w=40, load_type="dead"), UniformLoad(w=120, load_type="live")]
     two = design_beam(12.0, loads, section, SPF_NO2, span_mode="inside",
                       continuous_spans=[12.0, 12.0], bearing_lengths=[1.5, 3.5, 1.5])
-    assert two.summary.pattern_bending == "all spans"          # both adjacent to the support
-    assert two.summary.pattern_deflection in ("B1-B2", "B2-B3")  # a single span loaded
+    assert two.summary.pattern_bending == "live on all spans"          # both adjacent to the support
+    assert two.summary.pattern_deflection in ("live on B1-B2", "live on B2-B3")  # a single span
 
     # Three equal spans: bending at an interior support loads its two adjacent
     # spans; live deflection follows the classic alternate-span pattern.
     three = design_beam(12.0, loads, section, SPF_NO2, span_mode="inside",
                         continuous_spans=[12.0, 12.0, 12.0], bearing_lengths=[1.5, 3.5, 3.5, 1.5])
     assert "B1-B2" in three.summary.pattern_bending and "B2-B3" in three.summary.pattern_bending
-    assert three.summary.pattern_deflection == "B1-B2, B3-B4"
+    assert three.summary.pattern_deflection == "live on B1-B2, B3-B4"
+
+
+def test_partial_snow_loading_asce7_7_5():
+    # ASCE 7 7.5: continuous beams carry FULL or HALF the balanced snow per
+    # span. The superposition envelope must equal the brute-force worst over
+    # all full/half arrangements, and exceed loading full snow on every span.
+    import itertools
+
+    from engine import beam as beam_mod
+    from engine import patterns as P
+
+    L, s = 10.0, 100.0
+    total = 3 * L
+    supports = [0.0, L, 2 * L, 3 * L]
+    regions = [(0.0, L), (L, 2 * L), (2 * L, 3 * L)]
+    pb = P.PatternedBeam(total, [UniformLoad(w=s, load_type="snow", start=0.0, end=total)],
+                         supports, 1.0, 1.0)
+    xs, m_up, m_lo, _, _ = pb.moment_shear_envelope(("dead", "snow"))
+
+    def moment_series(loads):
+        r = beam_mod._reactions(total, loads, support_positions=supports)
+        return [beam_mod.moment_at(x, loads, total_length=total, support_positions=supports, reactions=r)
+                for x in xs]
+
+    best_pos = [-1e9] * len(xs)
+    best_neg = [1e9] * len(xs)
+    for combo in itertools.product([1.0, 0.5], repeat=3):
+        loads = [UniformLoad(w=s * f, load_type="snow", start=a, end=b)
+                 for f, (a, b) in zip(combo, regions)]
+        for i, m in enumerate(moment_series(loads)):
+            best_pos[i] = max(best_pos[i], m)
+            best_neg[i] = min(best_neg[i], m)
+    assert max(m_up) == pytest.approx(max(best_pos), abs=1e-6)
+    assert min(m_lo) == pytest.approx(min(best_neg), abs=1e-6)
+    # Full snow on every span under-predicts the positive moment.
+    full = moment_series([UniformLoad(w=s, load_type="snow", start=0.0, end=total)])
+    assert max(m_up) > 1.05 * max(full)
+
+    # A snow-governed continuous design reports the partial arrangement.
+    section = Section.from_nominal("2x12")
+    design = design_beam(12.0, [UniformLoad(w=30, load_type="dead"), UniformLoad(w=80, load_type="snow")],
+                         section, SPF_NO2, span_mode="inside",
+                         continuous_spans=[12.0, 12.0, 12.0], bearing_lengths=[1.5, 3.5, 3.5, 1.5])
+    assert "snow" in design.summary.pattern_bending
 
 
 def test_design_beam_two_span_mode_allows_end_overhangs_and_surfaces_tip_checks():

@@ -271,9 +271,9 @@ def _beam_design_story(design, result, styles):
         given_lines.append(f"<b>Continuous total length:</b> {result.summary.total_length:.2f} ft")
         if result.summary.pattern_bending:
             given_lines.append(
-                "<b>Skip (pattern) live load</b> (IBC 1607.12) &mdash; governing bending: live on "
+                "<b>Pattern loading</b> (IBC 1607.12 / ASCE 7 7.5) &mdash; governing bending: "
                 f"{result.summary.pattern_bending}"
-                + (f"; deflection: live on {result.summary.pattern_deflection}"
+                + (f"; deflection: {result.summary.pattern_deflection}"
                    if result.summary.pattern_deflection else ""),
             )
     elif design.span_mode != "inside":
@@ -871,7 +871,9 @@ def _basis_of_design_story(styles):
         "automatically; the designer must verify them where they govern.",
         "<b>Analysis:</b> Members are analyzed as simple or continuous beams by numerical "
         "stiffness (finite-element) analysis on the clear span(s). Continuous (multi-span) members "
-        "include pattern (skip) live loading per IBC 1607.12 / ASCE 7 Section 4.3.3.",
+        "include skip (pattern) live loading per IBC 1607.12 / ASCE 7 Section 4.3.3 and partial "
+        "snow loading per ASCE 7 Section 7.5 (each span carries the full or half the balanced "
+        "snow load, whichever governs).",
         "<b>Adjustment factors:</b> Reference values are adjusted per NDS 4.3 / 11.3 as applicable "
         "to each design (C<sub>D</sub> load duration, C<sub>M</sub> wet service, C<sub>t</sub> "
         "temperature, C<sub>F</sub>/C<sub>V</sub> size, C<sub>r</sub> repetitive, C<sub>L</sub> "

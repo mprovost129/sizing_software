@@ -15,17 +15,24 @@ add the per-span transient contributions whose sign matches the effect
 being maximized. That is the exact worst-over-all-patterns value, at a
 cost of k+1 solves for k patternable regions.
 
-Only floor live ("live") and roof live ("roof_live") loads are patterned
-here -- the loads IBC 1607.12 addresses. Dead is permanent; snow and wind
-keep their own (non-skip) provisions and are treated as always-on within
-their load combination.
+Floor live ("live") and roof live ("roof_live") loads are SKIP-patterned
+per IBC 1607.12 -- each span carries the full load or nothing. Snow is
+PARTIAL-patterned per ASCE 7 7.5 (continuous beam systems) -- each span
+carries the full balanced load or half of it, never zero. Dead and wind
+are permanent (full on every span within their combination). Same
+superposition machinery handles all three: for a skip span the "off"
+state contributes 0, for a partial span it contributes half.
 """
 from dataclasses import replace
 
 from . import beam as beam_mod
 from .loads import PointLoad, UniformLoad
 
+# Skip loads (IBC 1607.12): each span full or zero.
 PATTERNABLE_LOAD_TYPES = frozenset({"live", "roof_live"})
+# Partial loads (ASCE 7 7.5, snow on continuous beams): each span full or half.
+PARTIAL_LOAD_TYPES = frozenset({"snow"})
+PARTIAL_FRACTION = 0.5
 
 
 def pattern_regions(total_length, support_positions):
@@ -167,19 +174,20 @@ class PatternedBeam:
         by_type = {}
         for ld in loads:
             by_type.setdefault(ld.load_type, []).append(ld)
-        # key -> {"m", "v", "d", "patternable"}. Patternable types are split
-        # per span; everything else is a single whole-member case.
+        # key -> {"m", "v", "d", "category"}. Skip and partial types are split
+        # per span; everything else is a single whole-member (base) case.
         self.cases = {}
         for load_type, group in by_type.items():
-            if load_type in PATTERNABLE_LOAD_TYPES:
+            if load_type in PATTERNABLE_LOAD_TYPES or load_type in PARTIAL_LOAD_TYPES:
+                category = "skip" if load_type in PATTERNABLE_LOAD_TYPES else "partial"
                 for ri, (a, b) in enumerate(pattern_regions(total_length, support_positions)):
                     region_loads = _loads_in_region(group, a, b, total_length)
                     if region_loads:
-                        self.cases[(load_type, ri)] = self._solve_case(region_loads, E, I, patternable=True)
+                        self.cases[(load_type, ri)] = self._solve_case(region_loads, E, I, category)
             else:
-                self.cases[(load_type,)] = self._solve_case(group, E, I, patternable=False)
+                self.cases[(load_type,)] = self._solve_case(group, E, I, "base")
 
-    def _solve_case(self, active, E, I, patternable):
+    def _solve_case(self, active, E, I, category):
         # One FEM solve yields both the reactions (for moment/shear statics)
         # and the deflected shape for this elementary load case.
         reactions, src_xs, src_ys = beam_mod.reactions_and_shape(
@@ -190,37 +198,62 @@ class PatternedBeam:
                                support_positions=self.support_positions, reactions=reactions)
              for x, side in self.v_samples]
         d = [_interp(src_xs, src_ys, x) for x in self.xs]
-        return {"m": m, "v": v, "d": d, "patternable": patternable}
+        return {"m": m, "v": v, "d": d, "category": category}
 
     def _assemble(self, load_types, key):
+        """Split the active elementary cases for this combination into the
+        always-on base sum, the skip pieces (per span, off=0), and the partial
+        pieces (per span, off=half)."""
         base = None
-        pieces = []
+        skip_pieces = []
+        partial_pieces = []
         for cid, case in self.cases.items():
             if cid[0] not in load_types:
                 continue
             series = case[key]
-            if case["patternable"]:
-                pieces.append(series)
+            if case["category"] == "skip":
+                skip_pieces.append(series)
+            elif case["category"] == "partial":
+                partial_pieces.append(series)
             elif base is None:
                 base = list(series)
             else:
                 base = [base[i] + series[i] for i in range(len(base))]
         if base is None:
             base = [0.0] * len(self.xs if key != "v" else self.v_samples)
-        return base, pieces
+        return base, skip_pieces, partial_pieces
+
+    def _envelope(self, base, skip_pieces, partial_pieces):
+        upper, lower = [], []
+        for i in range(len(base)):
+            hi = base[i] + sum(p[i] for p in skip_pieces if p[i] > 0.0)
+            lo = base[i] + sum(p[i] for p in skip_pieces if p[i] < 0.0)
+            for p in partial_pieces:
+                # each partial span is full or half, never off.
+                hi += p[i] if p[i] > 0.0 else PARTIAL_FRACTION * p[i]
+                lo += PARTIAL_FRACTION * p[i] if p[i] > 0.0 else p[i]
+            upper.append(hi)
+            lower.append(lo)
+        return upper, lower
 
     def moment_shear_envelope(self, load_types):
         """(xs, m_upper, m_lower, v_upper, v_lower) for a load combination."""
-        base_m, m_pieces = self._assemble(load_types, "m")
-        base_v, v_pieces = self._assemble(load_types, "v")
-        m_upper, m_lower = _superpose(base_m, m_pieces)
-        v_upper, v_lower = _superpose(base_v, v_pieces)
+        m_upper, m_lower = self._envelope(*self._assemble(load_types, "m"))
+        v_upper, v_lower = self._envelope(*self._assemble(load_types, "v"))
         return self.xs, m_upper, m_lower, v_upper, v_lower
 
+    def _max_downward(self, base, skip_pieces, partial_pieces):
+        out = []
+        for i in range(len(base)):
+            val = base[i] + sum(p[i] for p in skip_pieces if p[i] > 0.0)
+            for p in partial_pieces:
+                val += p[i] if p[i] > 0.0 else PARTIAL_FRACTION * p[i]
+            out.append(val)
+        return out
+
     def deflection_envelope(self, load_types):
-        """Max downward deflection at each x over all live patterns."""
-        base, pieces = self._assemble(load_types, "d")
-        return [base[i] + sum(p[i] for p in pieces if p[i] > 0.0) for i in range(len(base))]
+        """Max downward deflection at each x over all live/snow patterns."""
+        return self._max_downward(*self._assemble(load_types, "d"))
 
     def max_downward_between(self, load_types, x1, x2):
         env = self.deflection_envelope(load_types)
@@ -239,9 +272,11 @@ class PatternedBeam:
         else:
             raise ValueError(f"side must be 'left' or 'right', got {side!r}")
         ti = min(range(len(self.xs)), key=lambda i: abs(self.xs[i] - x_tip))
-        base, pieces = self._assemble(load_types, "d")
-        down = base[ti] + sum(p[ti] for p in pieces if p[ti] > 0.0)
-        up = base[ti] + sum(p[ti] for p in pieces if p[ti] < 0.0)
+        base, skip_pieces, partial_pieces = self._assemble(load_types, "d")
+        down = self._max_downward(base, skip_pieces, partial_pieces)[ti]
+        up = base[ti] + sum(p[ti] for p in skip_pieces if p[ti] < 0.0)
+        for p in partial_pieces:
+            up += PARTIAL_FRACTION * p[ti] if p[ti] > 0.0 else p[ti]
         return max(abs(down), abs(up))
 
     def region_labels(self):
@@ -262,27 +297,48 @@ class PatternedBeam:
         return labels
 
     def governing_pattern(self, load_types, key, x, positive):
-        """Describe the skip-load arrangement that governs `key` ("m" moment
-        or "d" deflection) at position `x`: the spans whose live load is on in
-        the worst pattern. Empty when the combination has no patternable load
-        (e.g. dead+snow governs)."""
-        patternable = sorted({cid[1] for cid, c in self.cases.items()
-                              if cid[0] in load_types and c["patternable"]})
-        if not patternable:
-            return ""
+        """Self-contained phrase for the pattern that governs `key` ("m"
+        moment or "d" deflection) at position `x` -- which spans carry the
+        skip live load and, for snow, which carry full vs half. Empty when
+        the combination has no patternable load (e.g. dead-only governs)."""
         ti = min(range(len(self.xs)), key=lambda i: abs(self.xs[i] - x))
-        loaded = []
-        for cid, case in self.cases.items():
-            if cid[0] not in load_types or not case["patternable"]:
-                continue
-            val = case[key][ti]
-            if (positive and val > 1e-9) or (not positive and val < -1e-9):
-                loaded.append(cid[1])
-        loaded = sorted(set(loaded))
-        if not loaded or set(loaded) == set(patternable):
-            return "all spans"
         labels = self.region_labels()
-        return ", ".join(labels[i] for i in loaded)
+
+        def matches(val):
+            return val > 1e-9 if positive else val < -1e-9
+
+        skip_type = None
+        skip_present, skip_loaded = set(), set()
+        partial_present, partial_full = set(), set()
+        for cid, case in self.cases.items():
+            if cid[0] not in load_types:
+                continue
+            if case["category"] == "skip":
+                skip_type = cid[0]
+                skip_present.add(cid[1])
+                if matches(case[key][ti]):
+                    skip_loaded.add(cid[1])
+            elif case["category"] == "partial":
+                partial_present.add(cid[1])
+                if matches(case[key][ti]):
+                    partial_full.add(cid[1])
+
+        parts = []
+        if skip_present:
+            name = "roof live" if skip_type == "roof_live" else "live"
+            if not skip_loaded or skip_loaded == skip_present:
+                parts.append(f"{name} on all spans")
+            else:
+                parts.append(f"{name} on " + ", ".join(labels[i] for i in sorted(skip_loaded)))
+        if partial_present:
+            if partial_full == partial_present:
+                parts.append("full snow on all spans")
+            elif not partial_full:
+                parts.append("half snow on all spans")
+            else:
+                parts.append("full snow on " + ", ".join(labels[i] for i in sorted(partial_full))
+                             + ", half on the rest")
+        return "; ".join(parts)
 
 
 def peak_abs(upper, lower):

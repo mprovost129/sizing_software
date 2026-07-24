@@ -68,13 +68,13 @@ Completed in the live app:
 - Report identity / firm branding: a Settings page (nav gear) lets the signed-in user store their preparer / firm identity (name, firm/company, license no., phone, address) once on the User record. It then appears on every exported PDF -- a "Prepared by" line on each member report and a Firm / Prepared by / Contact block on the project package cover sheet -- so the output reads as a real engineering deliverable rather than an anonymous printout. Identity is per-user (set once), not per-project
 - Basis of design & assumptions page: every exported PDF now includes a standard "Basis of Design & Assumptions" section -- code (NDS-2018 ASD), user-entered loads disclaimer, the ASD load combinations checked, the numerical continuous-beam analysis method with IBC 1607.12 pattern loading, the adjustment factors applied, serviceability limits, and an honest scope/limitations statement (does not design LFRS, foundations, fire rating, or load path beyond the reactions shown; not a substitute for a licensed engineer's review and seal). It appears on its own page after the project package cover sheet and at the end of each standalone beam/column/connection report
 
+- Partial snow loading (ASCE 7 Section 7.5): continuous beams are now checked with each span carrying either the FULL or HALF the balanced snow load -- the arrangement producing the maximum effect -- which full-snow-on-all-spans under-predicts (~13% low on the positive span moment in a 3-span example). It reuses the pattern superposition machinery with a third load category ("partial", off-state = half instead of skip's off-state = zero), so it costs no extra solves; the moment/shear/deflection envelopes and the governing-arrangement report ("full snow on B1-B2, half on the rest") all reflect it. Verified to match a brute-force enumeration of every full/half span arrangement exactly. Gated to multi-span snow; single-span and non-snow results unchanged
+
 ## What Is Next
 
 Recommended next build order:
 
-1. Continuous-beam refinements
-   Optional unbalanced/partial snow patterns (only floor/roof live is patterned today).
-2. Engineering-report expansion
+1. Engineering-report expansion
    Optional firm logo upload; later sealed-report style structure.
 3. Loads tab expansion
    Continue refining saved-design workflows with project-level template sharing and selective load-template organization.
