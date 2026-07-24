@@ -213,6 +213,14 @@ def _beam_design_story(design, result, styles):
         story.append(Paragraph(f"<b>Revision note:</b> {escape(design.revision_note)}", styles["Normal"]))
     for line in _project_lines(design):
         story.append(Paragraph(line, styles["Normal"]))
+    preparer = design.user
+    if preparer.has_report_identity():
+        prepared = escape(preparer.preparer_name())
+        if preparer.license_number:
+            prepared += f", License {escape(preparer.license_number)}"
+        if preparer.firm_name:
+            prepared += f" &middot; {escape(preparer.firm_name)}"
+        story.append(Paragraph(f"<b>Prepared by:</b> {prepared}", styles["Normal"]))
     story.append(Spacer(1, 10))
 
     overall_text = "PASS" if result.passed else "FAIL"
@@ -332,6 +340,14 @@ def _beam_design_story(design, result, styles):
             for label, length, support_type in _support_schedule(design)
         ),
     )
+    if result.summary.support_reactions:
+        given_lines.append(
+            "<b>Support reactions (max):</b> " + " &middot; ".join(
+                f"{sr.label} = {sr.max_reaction:.0f} lb"
+                + (f" (NET UPLIFT {sr.uplift:.0f} lb -- hold-down required)" if sr.uplift < 0 else "")
+                for sr in result.summary.support_reactions
+            ),
+        )
     if design.left_overhang_ft or design.right_overhang_ft:
         given_lines.append(
             f"<b>Overhang:</b> {design.left_overhang_ft:g} ft left, "
@@ -872,10 +888,21 @@ def render_project_pdf(project, design_results, issue=None, column_results=None,
         project_rows.append(["Columns", str(len(column_results))])
     if connection_results:
         project_rows.append(["Connections", str(len(connection_results))])
+    # Preparer / firm identity from the project owner's Settings.
+    preparer = project.user
+    if preparer.firm_name:
+        project_rows.append(["Firm", Paragraph(escape(preparer.firm_name), styles["Normal"])])
+    prepared_line = escape(preparer.preparer_name())
+    if preparer.license_number:
+        prepared_line += f" &middot; License {escape(preparer.license_number)}"
+    project_rows.append(["Prepared by", Paragraph(prepared_line, styles["Normal"])])
+    contact = " &middot; ".join(escape(part) for part in (preparer.firm_address, preparer.phone) if part)
+    if contact:
+        project_rows.append(["Contact", Paragraph(contact, styles["Normal"])])
     if issue:
         project_rows.append(["Issue date", issue.created_at.strftime("%Y-%m-%d %H:%M")])
-        prepared_by = issue.created_by.email if issue.created_by else "Unknown"
-        project_rows.append(["Prepared by", escape(prepared_by)])
+        if issue.created_by:
+            project_rows.append(["Issued by", escape(issue.created_by.email)])
     story.append(_table(project_rows, col_widths=[1.4 * inch, 4.8 * inch]))
     story.append(Spacer(1, 14))
 

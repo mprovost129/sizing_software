@@ -78,6 +78,33 @@
 
 <div class="fc-card" style="margin-bottom:1.25rem;">
     <div class="fc-card-header">
+        <span class="fc-card-title"><i class="bi bi-arrow-down-up"></i> Support Reactions</span>
+        <span style="font-size:0.72rem;color:var(--fc-text-muted);">Max downward reaction &mdash; for sizing the bearing / header / post / footing below</span>
+    </div>
+    <table class="checks-table">
+        <thead>
+            <tr>
+                <th>Support</th>
+                <th>Max reaction (lb)</th>
+                <th>Governing combo</th>
+                <th>Net uplift (lb)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for sr in result.summary.support_reactions %}
+            <tr>
+                <td class="mono" style="font-weight:500;">{{ sr.label }}</td>
+                <td class="mono">{{ sr.max_reaction|floatformat:0 }}</td>
+                <td class="mono">{{ sr.governing_combo }}</td>
+                <td class="mono">{% if sr.uplift < 0 %}<span style="color:var(--fc-fail-border,#b91c1c);font-weight:600;">{{ sr.uplift|floatformat:0 }} &mdash; hold-down req'd</span>{% else %}&mdash;{% endif %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="fc-card" style="margin-bottom:1.25rem;">
+    <div class="fc-card-header">
         <span class="fc-card-title"><i class="bi bi-graph-up"></i> Analysis Diagrams</span>
         <span style="font-size:0.72rem;color:var(--fc-text-muted);">Governing shear, moment, and deflection plots</span>
     </div>

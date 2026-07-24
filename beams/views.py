@@ -37,6 +37,7 @@ from .forms import (
     ConnectionDesignForm,
     DistributedLoadFormSet,
     PointLoadFormSet,
+    UserSettingsForm,
 )
 from .load_inputs import (
     build_uniform_loads,
@@ -319,6 +320,22 @@ def _nonnegative_post_float(data, field_name, default=0.0):
     if value < 0:
         raise ValueError
     return value
+
+
+class SettingsView(LoginRequiredMixin, View):
+    """Edit the signed-in user's preparer / firm identity for reports."""
+    template_name = "beams/settings.html"
+
+    def get(self, request):
+        return render(request, self.template_name, {"form": UserSettingsForm(instance=request.user)})
+
+    def post(self, request):
+        form = UserSettingsForm(request.POST, instance=request.user)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Report identity saved.")
+            return redirect("beams:settings")
+        return render(request, self.template_name, {"form": form})
 
 
 class BeamDesignView(LoginRequiredMixin, View):

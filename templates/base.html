@@ -40,6 +40,9 @@
                     <a href="{% url 'beams:design' %}" class="nav-link nav-link--cta">
                         <i class="bi bi-plus"></i> New Design
                     </a>
+                    <a href="{% url 'beams:settings' %}" class="nav-link {% if request.resolver_match.url_name == 'settings' %}active{% endif %}">
+                        <i class="bi bi-gear"></i> Settings
+                    </a>
                     <form method="post" action="{% url 'logout' %}" style="display:contents;">
                         {% csrf_token %}
                         <button type="submit" class="nav-link nav-link--muted"

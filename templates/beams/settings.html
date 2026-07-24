@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+
+{% block title %}Settings | FrameCalc{% endblock %}
+
+{% block content %}
+<div class="page-container" style="max-width:820px;">
+    <div class="page-header">
+        <h1 class="page-title"><i class="bi bi-gear"></i> Settings</h1>
+        <p class="page-subtitle">Your preparer / firm identity. This appears on the cover sheet and every member report of the PDFs you export &mdash; set it once here.</p>
+    </div>
+
+    {% if messages %}
+    {% for message in messages %}
+    <div class="fc-alert fc-alert--success" style="margin-bottom:1rem;"><i class="bi bi-check-circle"></i> {{ message }}</div>
+    {% endfor %}
+    {% endif %}
+
+    <form method="post" class="fc-card">
+        {% csrf_token %}
+        <div class="fc-card-header">
+            <span class="fc-card-title"><i class="bi bi-person-badge"></i> Report Identity</span>
+            <span style="font-size:0.72rem;color:var(--fc-text-muted);">Shown on exported calculation packages</span>
+        </div>
+        <div class="fc-card-body">
+            {% for field in form %}
+            <div class="fc-form-group">
+                <label class="fc-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% for error in field.errors %}<p class="fc-field-error">{{ error }}</p>{% endfor %}
+            </div>
+            {% endfor %}
+            <p style="font-size:0.72rem;color:var(--fc-text-muted);margin:.5rem 0 0;">
+                These fields identify who prepared the calculations. FrameCalc output is preliminary sizing and is not a substitute for a licensed engineer's independent review and seal.
+            </p>
+            <div style="display:flex;justify-content:flex-end;gap:.5rem;margin-top:1rem;">
+                <button type="submit" class="fc-btn fc-btn--primary"><i class="bi bi-check-lg"></i> Save</button>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}

@@ -6,6 +6,7 @@ app_name = "beams"
 
 urlpatterns = [
     path("design/", views.BeamDesignView.as_view(), name="design"),
+    path("settings/", views.SettingsView.as_view(), name="settings"),
     path("column/", views.ColumnDesignView.as_view(), name="column"),
     path("connection/", views.ConnectionDesignView.as_view(), name="connection"),
     path("connection/<int:pk>/", views.ConnectionDesignDetailView.as_view(), name="connection_detail"),

@@ -1506,6 +1506,27 @@ def test_design_beam_multi_span_uses_pattern_live_load():
     assert single.summary.pattern_bending == ""  # single-span: no pattern note
 
 
+def test_support_reactions_summary():
+    section = Section.from_nominal("2x10")
+    # Single 14 ft span, D=27 + L=40 = 67 plf -> each reaction = wL/2 = 469 lb (D+L).
+    single = design_beam(14.0, [UniformLoad(w=27, load_type="dead"), UniformLoad(w=40, load_type="live")],
+                         section, SPF_NO2, span_mode="inside")
+    rr = single.summary.support_reactions
+    assert [r.label for r in rr] == ["B1", "B2"]
+    assert rr[0].max_reaction == pytest.approx(469.0, abs=1.0)
+    assert rr[0].governing_combo == "D+L"
+    assert rr[0].uplift == 0.0
+
+    # Two equal 12 ft spans, D=40 + L=120 = 160 plf: classic continuous
+    # reactions -- interior 1.25 wL = 2400 lb, ends 0.375 wL = 720 lb.
+    two = design_beam(12.0, [UniformLoad(w=40, load_type="dead"), UniformLoad(w=120, load_type="live")],
+                      section, SPF_NO2, span_mode="inside",
+                      continuous_spans=[12.0, 12.0], bearing_lengths=[1.5, 3.5, 1.5])
+    rr2 = two.summary.support_reactions
+    assert rr2[1].max_reaction == pytest.approx(2400.0, rel=1e-2)   # interior B2
+    assert rr2[0].max_reaction == pytest.approx(720.0, rel=1e-2)    # end B1
+
+
 def test_governing_skip_load_arrangement():
     # The governing skip-load arrangement is reported so it can be reproduced
     # by hand. Two equal spans: max moment is the interior-support hogging with

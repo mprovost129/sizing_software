@@ -1,4 +1,5 @@
 from django import forms
+from django.contrib.auth import get_user_model
 
 from engine import clear_span, default_deflection_settings
 
@@ -563,6 +564,29 @@ class ConnectionDesignForm(forms.Form):
         label="Edge distance (in)", min_value=0, required=False,
         widget=forms.NumberInput(attrs={"class": "fc-input", "step": "any", "placeholder": "adequacy check"}),
     )
+
+
+class UserSettingsForm(forms.ModelForm):
+    """Preparer / firm identity shown on calculation reports."""
+    class Meta:
+        model = get_user_model()
+        fields = ["first_name", "last_name", "firm_name", "license_number", "phone", "firm_address"]
+        labels = {
+            "first_name": "First name",
+            "last_name": "Last name",
+            "firm_name": "Firm / company name",
+            "license_number": "License no. (PE / SE)",
+            "phone": "Phone",
+            "firm_address": "Firm address",
+        }
+        widgets = {
+            "first_name": forms.TextInput(attrs={"class": "fc-input"}),
+            "last_name": forms.TextInput(attrs={"class": "fc-input"}),
+            "firm_name": forms.TextInput(attrs={"class": "fc-input", "placeholder": "Shown on report cover sheets"}),
+            "license_number": forms.TextInput(attrs={"class": "fc-input"}),
+            "phone": forms.TextInput(attrs={"class": "fc-input"}),
+            "firm_address": forms.TextInput(attrs={"class": "fc-input", "placeholder": "Street, city, state ZIP"}),
+        }
 
 
 class PointLoadForm(forms.Form):

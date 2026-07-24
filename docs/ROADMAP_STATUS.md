@@ -64,6 +64,8 @@ Completed in the live app:
 - Pattern (skip) live loading for continuous beams (IBC 1607.12 / ASCE 7 4.3.3): multi-span beams were analyzed with every span fully loaded, which under-predicts BOTH the maximum positive span moment and the maximum negative support moment -- and, most severely for equal-span wood beams, the mid-span deflection (a two-span example deflects ~1.7x the full-span value under one-span-loaded pattern). The engine now computes the exact worst-over-all-patterns envelope of moment, shear, and deflection by per-span superposition (a new engine/patterns.py): floor and roof live loads are split per span, each elementary load case is solved once, and every load combination's envelope is assembled by adding the per-span transient contributions whose sign maximizes the effect -- no 2^k pattern enumeration. Bending, shear, live and total deflection (back-span and cantilever tips) all use the envelope; the moment and shear diagrams draw the max-positive and max-negative envelope curves. Gated to multi-span, so single-span and single-span-with-overhang results are byte-for-byte unchanged
 - Banded FEM solver: the continuous-beam stiffness matrix is narrowly banded (2 DOF/node, only adjacent nodes couple), so the linear solve was switched from dense partial-pivoting Gaussian elimination (O(n^3)) to a no-pivot banded solve (O(n), stable because the free-free stiffness partition is symmetric positive definite), with a dense fallback for anything not clearly banded. Results are numerically identical (verified to ~1e-12 against the dense solver and by every existing hand-calc test). This made continuous-beam pattern analysis interactive: 10-span design 12.3 s -> 0.65 s (19x), 8-span 4.6 s -> 0.34 s, and it speeds up every design's deflection/reaction solves. The member-preview viewer beam was also fixed to draw a solid depth-scaled rectangle (scaling with the member's actual dressed depth) instead of a fixed-height stretched image that read as a flat line
 - Governing skip-load arrangement: continuous-beam results now report WHICH spans carry live load in the governing pattern -- for bending ("all spans" when the interior-support hogging governs, or the alternate/adjacent spans by label, e.g. "B1-B2, B3-B4") and for live deflection -- so the designer can reproduce the ASCE 7 / IBC 1607.12 pattern by hand. Derived from the sign of each span's contribution at the envelope peak (no extra solves); shown in the result preview and the PDF report; empty for single-span
+- Support reactions summary: a consolidated "Support Reactions" table (web result + PDF) gives the governing (maximum) downward reaction at each support, the governing load combination, and a net-uplift flag -- the value the designer needs to size the bearing / header / post / footing below. Previously reactions were only listed per-combination in the load-combinations table; this surfaces the max per support directly. Computed from the already-stored combination reactions (no extra solves) and verified against the classic continuous-beam coefficients (interior 1.25 wL, ends 0.375 wL for two equal spans)
+- Report identity / firm branding: a Settings page (nav gear) lets the signed-in user store their preparer / firm identity (name, firm/company, license no., phone, address) once on the User record. It then appears on every exported PDF -- a "Prepared by" line on each member report and a Firm / Prepared by / Contact block on the project package cover sheet -- so the output reads as a real engineering deliverable rather than an anonymous printout. Identity is per-user (set once), not per-project
 
 ## What Is Next
 
@@ -71,14 +73,14 @@ Recommended next build order:
 
 1. Continuous-beam refinements
    Optional unbalanced/partial snow patterns (only floor/roof live is patterned today).
-2. Loads tab expansion
+2. Engineering-report expansion
+   Build on the new report identity: an assumptions / basis-of-design page, optional firm logo, and later sealed-report style structure.
+3. Loads tab expansion
    Continue refining saved-design workflows with project-level template sharing and selective load-template organization.
-3. Project-container expansion
+4. Project-container expansion
    Add issue supersession/status controls and optional transmittal metadata for formal package workflows.
-4. Engineering-report expansion
-   Keep growing the current PDF package with firm branding, cover sheets, assumptions, and later sealed-report style structure if needed.
 5. Settings-tab expansion
-   Keep growing serviceability controls with later options such as vibration guidance, finish-sensitive presets, or richer member-specific tuning.
+   Grow the new Settings page with serviceability controls (vibration guidance, finish-sensitive deflection presets) and default project/report preferences.
 
 ## Known Gaps
 

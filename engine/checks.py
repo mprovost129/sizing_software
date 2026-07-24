@@ -97,6 +97,18 @@ class SectionSummary:
 
 
 @dataclass
+class SupportReaction:
+    """Governing reaction at one support, for sizing the bearing / header /
+    post / footing below. `max_reaction` is the largest downward reaction
+    over the load combinations; `uplift` is the most negative (net-uplift)
+    reaction, 0.0 if the support never lifts."""
+    label: str
+    max_reaction: float
+    governing_combo: str
+    uplift: float = 0.0
+
+
+@dataclass
 class ComboSummary:
     name: str
     cd: float
@@ -189,6 +201,7 @@ class BeamSummary:
     # otherwise). Lets the designer reproduce the pattern by hand.
     pattern_bending: str = ""
     pattern_deflection: str = ""
+    support_reactions: list = field(default_factory=list)  # SupportReaction per support
 
 
 @dataclass
@@ -522,6 +535,20 @@ def design_beam(
             result.deflection_total.name, "in", ("dead", "live", "snow", "roof_live", "wind"),
             total_length, loads, section, material, support_positions,
         )
+
+    # Governing reaction at each support (max over the load combinations) for
+    # sizing the bearing / header / post / footing below, plus a net-uplift
+    # flag if any combination lifts the support.
+    reaction_rows = []
+    for i, label in enumerate(summary.support_labels):
+        per_combo = [(combo.reactions[i], combo.name) for combo in summary.combos]
+        max_reaction, governing = max(per_combo, key=lambda pair: pair[0])
+        min_reaction = min(reaction for reaction, _ in per_combo)
+        reaction_rows.append(SupportReaction(
+            label=label, max_reaction=max_reaction, governing_combo=governing,
+            uplift=min_reaction if min_reaction < 0 else 0.0,
+        ))
+    summary.support_reactions = reaction_rows
 
     return result
 
